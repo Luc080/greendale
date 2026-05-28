@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Greendale – Phase 2</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  /* ===== VARIABLEN ===== */
+  :root {
+    --green-dark: #2d5a27;
+    --green-mid: #4a8c42;
+    --green-light: #7bc67a;
+    --amber: #f0a500;
+    --amber-light: #ffd166;
+    --red: #e05252;
+    --blue: #4a90d9;
+    --ui-border: #d4b896;
+    --shadow: rgba(0,0,0,0.18);
+    --text: #3a2a1a;
+    --text-light: #7a6a5a;
+    --panel: rgba(255,248,235,0.97);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Nunito', sans-serif;
+    background: linear-gradient(180deg, #c9e8f5 0%, #87ceeb 40%, #b8dba0 40%, #5a9e50 100%);
+    min-height: 100vh;
+    overflow: hidden;
+    user-select: none;
+  }
+  #game-container { width: 100vw; height: 100vh; display: flex; flex-direction: column; }
+
+  /* ===== TOPBAR ===== */
+  #topbar {
+    display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+    background: var(--panel); border-bottom: 2px solid var(--ui-border);
+    box-shadow: 0 2px 8px var(--shadow); z-index: 10; flex-wrap: wrap;
+  }
+  .game-title { font-size: 18px; font-weight: 900; color: var(--green-dark); margin-right: 4px; }
+  .res-chip {
+    display: flex; align-items: center; gap: 4px; background: #fff;
+    border: 2px solid var(--ui-border); border-radius: 20px;
+    padding: 3px 10px; font-size: 13px; font-weight: 700; color: var(--text);
+  }
+  .res-val { min-width: 24px; text-align: right; }
+  #time-chip {
+    margin-left: auto; background: var(--green-dark); color: #fff;
+    border-radius: 20px; padding: 3px 12px; font-size: 12px; font-weight: 700;
+  }
+  #xp-chip {
+    background: var(--amber); color: #fff;
+    border-radius: 20px; padding: 3px 12px; font-size: 12px; font-weight: 700;
+  }
+  #save-btn {
+    padding: 3px 12px; border-radius: 16px; border: 2px solid var(--green-mid);
+    background: var(--green-dark); color: #fff; font-family: 'Nunito', sans-serif;
+    font-weight: 700; font-size: 12px; cursor: pointer;
+  }
+
+  /* ===== CANVAS ===== */
+  #canvas-wrap { flex: 1; position: relative; overflow: hidden; }
+  canvas { display: block; }
+
+  /* ===== BOTTOM PANEL ===== */
+  #bottom-panel {
+    background: var(--panel); border-top: 2px solid var(--ui-border);
+    padding: 8px 14px; z-index: 10; box-shadow: 0 -2px 8px var(--shadow);
+  }
+  #tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+  .tab-btn {
+    padding: 4px 12px; border-radius: 16px; border: 2px solid var(--ui-border);
+    background: #fff; font-family: 'Nunito', sans-serif; font-weight: 700;
+    font-size: 12px; cursor: pointer; color: var(--text-light); transition: all 0.15s;
+  }
+  .tab-btn.active { background: var(--green-dark); color: #fff; border-color: var(--green-dark); }
+  #tab-content { min-height: 80px; max-height: 120px; overflow-y: auto; }
+
+  /* ===== VILLAGER ROWS ===== */
+  .villager-row {
+    display: flex; align-items: center; gap: 8px; padding: 5px 8px;
+    border-radius: 10px; margin-bottom: 3px; background: #fff;
+    border: 2px solid var(--ui-border); cursor: pointer; transition: border-color 0.15s;
+  }
+  .villager-row:hover { border-color: var(--green-mid); }
+  .villager-row.selected { border-color: var(--amber); background: #fffbe8; }
+  .v-avatar { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+  .v-name { font-weight: 800; font-size: 13px; color: var(--text); flex: 1; }
+  .v-task { font-size: 11px; color: var(--text-light); background: #f0ebe0; border-radius: 10px; padding: 2px 7px; font-weight: 600; }
+  .v-task.working { color: var(--green-dark); background: #d4f0d4; }
+  .v-speed { font-size: 11px; color: var(--blue); font-weight: 700; }
+  .v-hunger { display: flex; gap: 2px; }
+  .hunger-dot { width: 7px; height: 7px; border-radius: 50%; background: #ddd; }
+  .hunger-dot.full { background: var(--amber); }
+  .hunger-dot.low { background: var(--red); }
+
+  /* ===== BUILD CARDS ===== */
+  .building-grid { display: flex; gap: 6px; flex-wrap: wrap; }
+  .build-card {
+    background: #fff; border: 2px solid var(--ui-border); border-radius: 10px;
+    padding: 6px 10px; cursor: pointer; transition: all 0.15s;
+    display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700;
+  }
+  .build-card:hover { border-color: var(--green-mid); transform: translateY(-1px); }
+  .build-card.selected { border-color: var(--amber); background: #fffbe8; }
+  .build-card.locked { opacity: 0.45; cursor: not-allowed; }
+  .build-icon { font-size: 18px; }
+  .build-cost { font-size: 10px; color: var(--text-light); font-weight: 600; }
+
+  /* ===== ORDERS ===== */
+  .order-card {
+    display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+    border-radius: 10px; margin-bottom: 4px; background: #fff;
+    border: 2px solid var(--ui-border);
+  }
+  .order-card.completable { border-color: var(--green-mid); background: #f0fff0; }
+  .order-items { flex: 1; font-size: 12px; color: var(--text); font-weight: 600; }
+  .order-reward { font-size: 11px; color: var(--amber); font-weight: 800; }
+  .order-btn {
+    padding: 4px 10px; border-radius: 8px; border: none;
+    background: var(--green-dark); color: #fff;
+    font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 11px;
+    cursor: pointer; transition: background 0.15s;
+  }
+  .order-btn:disabled { background: #ccc; cursor: not-allowed; }
+  .order-btn:not(:disabled):hover { background: var(--green-mid); }
+
+  /* ===== POPUP ===== */
+  #info-popup {
+    position: absolute; background: var(--panel); border: 2px solid var(--ui-border);
+    border-radius: 14px; padding: 12px 14px; min-width: 190px;
+    box-shadow: 0 4px 16px var(--shadow); z-index: 20; display: none; pointer-events: none;
+  }
+  #info-popup h3 { font-size: 14px; font-weight: 800; color: var(--text); margin-bottom: 3px; }
+  #info-popup p { font-size: 11px; color: var(--text-light); margin-bottom: 4px; }
+  .chain-info { font-size: 11px; color: var(--blue); font-weight: 700; margin-bottom: 6px; }
+  .assign-btn {
+    display: block; width: 100%; padding: 4px 8px; margin-top: 4px;
+    border-radius: 8px; border: 2px solid var(--green-mid); background: var(--green-dark);
+    color: #fff; font-family: 'Nunito', sans-serif; font-weight: 700;
+    font-size: 11px; cursor: pointer; pointer-events: all; transition: background 0.15s;
+  }
+  .assign-btn:hover { background: var(--green-mid); }
+  .remove-btn {
+    display: block; width: 100%; padding: 4px 8px; margin-top: 4px;
+    border-radius: 8px; border: 2px solid var(--red); background: var(--red);
+    color: #fff; font-family: 'Nunito', sans-serif; font-weight: 700;
+    font-size: 11px; cursor: pointer; pointer-events: all;
+  }
+
+  /* ===== NOTIFICATION ===== */
+  #notif {
+    position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+    background: var(--green-dark); color: #fff; padding: 7px 18px;
+    border-radius: 20px; font-weight: 700; font-size: 13px; z-index: 30;
+    opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap;
+  }
+  #notif.show { opacity: 1; }
+
+  /* ===== CHAINS PANEL ===== */
+  .chain-row {
+    display: flex; align-items: center; gap: 6px; padding: 5px 8px;
+    border-radius: 8px; background: #fff; border: 2px solid var(--ui-border);
+    margin-bottom: 3px; font-size: 12px;
+  }
+  .chain-arrow { color: var(--text-light); font-size: 14px; }
+  .chain-step { font-weight: 700; }
+  .chain-step.ready { color: var(--green-dark); }
+  .chain-step.waiting { color: var(--red); }
+</style>
+</head>
+<body>
+<div id="game-container">
+
+  <!-- TOPBAR -->
+  <div id="topbar">
+    <span class="game-title">🌿 Greendale</span>
+    <div class="res-chip"><span>🪵</span><span class="res-val" id="res-wood">24</span></div>
+    <div class="res-chip"><span>🪨</span><span class="res-val" id="res-stone">12</span></div>
+    <div class="res-chip"><span>🌾</span><span class="res-val" id="res-wheat">8</span></div>
+    <div class="res-chip"><span>🍲</span><span class="res-val" id="res-soup">4</span></div>
+    <div class="res-chip"><span>🪑</span><span class="res-val" id="res-furniture">0</span></div>
+    <div class="res-chip"><span>🧱</span><span class="res-val" id="res-brick">0</span></div>
+    <div id="xp-chip">⭐ XP: <span id="xp-val">0</span></div>
+    <div id="time-chip">⏱ Tag 1</div>
+    <button id="save-btn" onclick="saveGame()">💾 Speichern</button>
+  </div>
+
+  <!-- CANVAS -->
+  <div id="canvas-wrap">
+    <canvas id="gameCanvas"></canvas>
+    <div id="info-popup">
+      <h3 id="popup-title"></h3>
+      <p id="popup-desc"></p>
+      <div class="chain-info" id="popup-chain"></div>
+      <div id="popup-actions"></div>
+    </div>
+    <div id="notif"></div>
+  </div>
+
+  <!-- BOTTOM PANEL -->
+  <div id="bottom-panel">
+    <div id="tabs">
+      <button class="tab-btn active" onclick="switchTab('villagers')">👤 Villager</button>
+      <button class="tab-btn" onclick="switchTab('orders')">📋 Aufträge</button>
+      <button class="tab-btn" onclick="switchTab('build')">🏗 Bauen</button>
+      <button class="tab-btn" onclick="switchTab('chains')">⛓ Ketten</button>
+    </div>
+    <div id="tab-content"></div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// PRODUKTIONSKETTEN DEFINITION
+// Jedes Gebäude: was braucht es (input), was produziert es (output)
+// ============================================================
+var CHAINS = {
+  sawmill:   { input: null,          inputAmt: 0, output: 'wood',      outputAmt: 2, label: 'Produziert Holz'                     },
+  quarry:    { input: null,          inputAmt: 0, output: 'stone',     outputAmt: 2, label: 'Produziert Steine'                   },
+  farm:      { input: null,          inputAmt: 0, output: 'wheat',     outputAmt: 3, label: 'Produziert Weizen'                   },
+  kitchen:   { input: 'wheat',       inputAmt: 2, output: 'soup',      outputAmt: 1, label: 'Weizen → Suppe'                     },
+  carpentry: { input: 'wood',        inputAmt: 3, output: 'furniture', outputAmt: 1, label: 'Holz → Moebel'                      },
+  brickyard: { input: 'stone',       inputAmt: 3, output: 'brick',     outputAmt: 2, label: 'Stein → Ziegel'                     },
+  bakery:    { input: 'wheat',       inputAmt: 2, output: 'bread',     outputAmt: 2, label: 'Weizen → Brot'                      },
+  well:      { input: null,          inputAmt: 0, output: 'water',     outputAmt: 2, label: 'Produziert Wasser'                   },
+  warehouse: { input: null,          inputAmt: 0, output: null,        outputAmt: 0, label: 'Erhoeht Lagerkapazitaet'             },
+  townhall:  { input: null,          inputAmt: 0, output: null,        outputAmt: 0, label: 'Zentrum des Dorfes'                  }
+};
+
+// Gebaeude die gebaut werden koennen (mit Kosten)
+var BUILDING_TYPES = {
+  sawmill:   { name: 'Saegewerk',   emoji: '🪓', costWood: 0,  costStone: 5,  reqXP: 0   },
+  quarry:    { name: 'Steinbruch',  emoji: '⛏',  costWood: 6,  costStone: 0,  reqXP: 0   },
+  farm:      { name: 'Farm',        emoji: '🌾', costWood: 4,  costStone: 0,  reqXP: 0   },
+  kitchen:   { name: 'Kueche',      emoji: '🍲', costWood: 8,  costStone: 4,  reqXP: 0   },
+  carpentry: { name: 'Zimmerei',    emoji: '🪑', costWood: 12, costStone: 6,  reqXP: 20  },
+  brickyard: { name: 'Ziegelei',    emoji: '🧱', costWood: 8,  costStone: 12, reqXP: 20  },
+  bakery:    { name: 'Baeckerei',   emoji: '🥖', costWood: 10, costStone: 8,  reqXP: 40  },
+  well:      { name: 'Brunnen',     emoji: '🪣', costWood: 6,  costStone: 10, reqXP: 10  },
+  warehouse: { name: 'Lager',       emoji: '📦', costWood: 10, costStone: 8,  reqXP: 0   }
+};
+
+// ============================================================
+// AUFTRAEGE – werden zufaellig generiert
+// ============================================================
+var ORDER_TEMPLATES = [
+  { items: { wood: 5 },               xp: 10, label: '5x Holz'                     },
+  { items: { stone: 5 },              xp: 10, label: '5x Stein'                    },
+  { items: { wheat: 6 },              xp: 12, label: '6x Weizen'                   },
+  { items: { soup: 3 },               xp: 20, label: '3x Suppe'                    },
+  { items: { wood: 4, stone: 4 },     xp: 18, label: '4x Holz + 4x Stein'         },
+  { items: { furniture: 2 },          xp: 30, label: '2x Moebel'                   },
+  { items: { brick: 3 },              xp: 28, label: '3x Ziegel'                   },
+  { items: { soup: 2, furniture: 1 }, xp: 40, label: '2x Suppe + 1x Moebel'       },
+  { items: { wood: 8 },               xp: 22, label: '8x Holz'                     },
+  { items: { stone: 6, brick: 2 },    xp: 35, label: '6x Stein + 2x Ziegel'       }
+];
+
+function generateOrders() {
+  var orders = [];
+  for (var i = 0; i < 3; i++) {
+    var tmpl = ORDER_TEMPLATES[Math.floor(Math.random() * ORDER_TEMPLATES.length)];
+    orders.push({ id: i, items: JSON.parse(JSON.stringify(tmpl.items)), xp: tmpl.xp, label: tmpl.label });
+  }
+  return orders;
+}
+
+// ============================================================
+// SPIELZUSTAND
+// ============================================================
+var state = {
+  resources: { wood: 24, stone: 12, wheat: 8, soup: 4, furniture: 0, brick: 0, bread: 0, water: 0 },
+  xp: 0,
+  day: 1,
+  tick: 0,
+  selectedBuilding: null,
+  selectedVillager: null,
+  buildMode: null,
+  activeTab: 'villagers',
+  hoverTile: null,
+  orders: generateOrders(),
+  villagers: [
+    { id: 0, name: 'Lena',  emoji: '👧', task: 'Idle', hunger: 3, x: 5, y: 5, tx: 5, ty: 5, moving: false, buildingId: null, progress: 0 },
+    { id: 1, name: 'Tom',   emoji: '👦', task: 'Idle', hunger: 3, x: 6, y: 5, tx: 6, ty: 5, moving: false, buildingId: null, progress: 0 },
+    { id: 2, name: 'Maria', emoji: '👩', task: 'Idle', hunger: 2, x: 5, y: 6, tx: 5, ty: 6, moving: false, buildingId: null, progress: 0 }
+  ],
+  buildings: [
+    { id: 0, type: 'townhall',  col: 5, row: 4, name: 'Rathaus',    emoji: '🏛', color: '#e8d5a3' },
+    { id: 1, type: 'sawmill',   col: 3, row: 2, name: 'Saegewerk',  emoji: '🪓', color: '#c9956b' },
+    { id: 2, type: 'quarry',    col: 8, row: 3, name: 'Steinbruch', emoji: '⛏',  color: '#b0b0c0' },
+    { id: 3, type: 'farm',      col: 6, row: 7, name: 'Farm',       emoji: '🌾', color: '#c8e6a0' },
+    { id: 4, type: 'kitchen',   col: 3, row: 6, name: 'Kueche',     emoji: '🍲', color: '#f5c87a' },
+    { id: 5, type: 'warehouse', col: 9, row: 6, name: 'Lager',      emoji: '📦', color: '#d4b896' }
+  ]
+};
+
+// ============================================================
+// SPEICHERN / LADEN
+// ============================================================
+function saveGame() {
+  try {
+    localStorage.setItem('greendale_save', JSON.stringify(state));
+    showNotif('💾 Gespeichert!');
+  } catch(e) {
+    showNotif('Speichern fehlgeschlagen');
+  }
+}
+
+function loadGame() {
+  try {
+    var saved = localStorage.getItem('greendale_save');
+    if (saved) {
+      var loaded = JSON.parse(saved);
+      state.resources  = loaded.resources  || state.resources;
+      state.xp         = loaded.xp         || 0;
+      state.day        = loaded.day         || 1;
+      state.buildings  = loaded.buildings   || state.buildings;
+      state.villagers  = loaded.villagers   || state.villagers;
+      state.orders     = loaded.orders      || generateOrders();
+      showNotif('✅ Spielstand geladen!');
+    }
+  } catch(e) {}
+}
+
+// ============================================================
+// CANVAS SETUP
+// ============================================================
+var canvas = document.getElementById('gameCanvas');
+var ctx = canvas.getContext('2d');
+var TW = 64, TH = 32, COLS = 14, ROWS = 12;
+var oX = 0, oY = 0;
+
+var TC = [];
+for (var r = 0; r < ROWS; r++) {
+  TC[r] = [];
+  for (var c = 0; c < COLS; c++) {
+    var v = Math.random();
+    TC[r][c] = v > 0.85 ? '#6ab060' : v > 0.6 ? '#5a9e50' : '#52924a';
+  }
+}
+
+function resize() {
+  var wrap = document.getElementById('canvas-wrap');
+  canvas.width  = wrap.clientWidth;
+  canvas.height = wrap.clientHeight;
+  oX = canvas.width / 2 - TW / 2;
+  oY = 60;
+  draw();
+}
+window.addEventListener('resize', resize);
+
+function toIso(col, row) {
+  return { x: oX + (col - row) * (TW / 2), y: oY + (col + row) * (TH / 2) };
+}
+function fromIso(px, py) {
+  var rx = px - oX, ry = py - oY;
+  return {
+    col: Math.round((rx / (TW / 2) + ry / (TH / 2)) / 2),
+    row: Math.round((ry / (TH / 2) - rx / (TW / 2)) / 2)
+  };
+}
+function shadeColor(hex, pct) {
+  var num = parseInt(hex.replace('#',''), 16);
+  var r = Math.min(255, Math.max(0, (num >> 16) + pct));
+  var g = Math.min(255, Math.max(0, ((num >> 8) & 0xff) + pct));
+  var b = Math.min(255, Math.max(0, (num & 0xff) + pct));
+  return 'rgb(' + r + ',' + g + ',' + b + ')';
+}
+
+// ============================================================
+// ZEICHNEN
+// ============================================================
+function drawTile(col, row, fillColor, strokeColor) {
+  var p = toIso(col, row);
+  ctx.beginPath();
+  ctx.moveTo(p.x, p.y);
+  ctx.lineTo(p.x + TW/2, p.y + TH/2);
+  ctx.lineTo(p.x, p.y + TH);
+  ctx.lineTo(p.x - TW/2, p.y + TH/2);
+  ctx.closePath();
+  ctx.fillStyle = fillColor;
+  ctx.fill();
+  ctx.strokeStyle = strokeColor || 'rgba(255,255,255,0.18)';
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+}
+
+function drawBuilding(b) {
+  var p = toIso(b.col, b.row);
+  var x = p.x, y = p.y;
+  var W = 52, H = 44;
+  var bx = x - W/2, by = y - H + TH/2;
+
+  // Schatten
+  ctx.save();
+  ctx.globalAlpha = 0.18;
+  ctx.beginPath();
+  ctx.ellipse(x, y + TH/2, 28, 10, 0, 0, Math.PI*2);
+  ctx.fillStyle = '#000';
+  ctx.fill();
+  ctx.restore();
+
+  // Gebaeude-Koerper
+  var sel = (state.selectedBuilding === b.id);
+  ctx.beginPath();
+  ctx.roundRect(bx, by, W, H, 8);
+  ctx.fillStyle = b.color;
+  ctx.fill();
+  ctx.strokeStyle = sel ? '#f0a500' : 'rgba(0,0,0,0.25)';
+  ctx.lineWidth = sel ? 3 : 1.5;
+  ctx.stroke();
+
+  // Dach
+  ctx.beginPath();
+  ctx.roundRect(bx+2, by-10, W-4, 16, 6);
+  ctx.fillStyle = shadeColor(b.color, -30);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Emoji
+  ctx.font = '22px serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(b.emoji, x, by + H/2 - 2);
+
+  // Name
+  ctx.font = 'bold 10px Nunito, sans-serif';
+  ctx.fillStyle = '#3a2a1a';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillText(b.name, x, by + H + 2);
+
+  // Produktions-Fortschrittsbalken
+  var workers = state.villagers.filter(function(v) { return v.buildingId === b.id; });
+  if (workers.length > 0) {
+    // Arbeiter-Emojis
+    ctx.font = '12px serif';
+    ctx.fillText(workers.map(function(v) { return v.emoji; }).join(''), x, by - 26);
+    // Fortschrittsbalken
+    var avgProgress = 0;
+    for (var i = 0; i < workers.length; i++) avgProgress += workers[i].progress;
+    avgProgress = avgProgress / workers.length;
+    var barW = W - 8;
+    var barH = 4;
+    var barX = bx + 4;
+    var barY = by - 10;
+    ctx.beginPath();
+    ctx.roundRect(barX, barY, barW, barH, 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.roundRect(barX, barY, barW * (avgProgress / 100), barH, 2);
+    ctx.fillStyle = '#4a8c42';
+    ctx.fill();
+  }
+}
+
+function drawVillager(v) {
+  var p = toIso(v.x, v.y);
+  var px = p.x, py = p.y + TH/2 - 6;
+
+  ctx.save();
+  ctx.globalAlpha = 0.15;
+  ctx.beginPath();
+  ctx.ellipse(px, py+14, 10, 4, 0, 0, Math.PI*2);
+  ctx.fillStyle = '#000';
+  ctx.fill();
+  ctx.restore();
+
+  if (state.selectedVillager === v.id) {
+    ctx.beginPath();
+    ctx.arc(px, py+6, 16, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(240,165,0,0.25)';
+    ctx.fill();
+    ctx.strokeStyle = '#f0a500';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  // Hunger-Indikator (rot wenn hungrig)
+  if (v.hunger <= 1) {
+    ctx.beginPath();
+    ctx.arc(px + 10, py - 4, 5, 0, Math.PI*2);
+    ctx.fillStyle = '#e05252';
+    ctx.fill();
+    ctx.font = 'bold 7px Nunito, sans-serif';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('!', px + 10, py - 4);
+  }
+
+  ctx.font = '22px serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(v.emoji, px, py+8);
+
+  ctx.font = 'bold 9px Nunito, sans-serif';
+  ctx.fillStyle = '#3a2a1a';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillText(v.name, px, py+10);
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  for (var r = 0; r < ROWS; r++) {
+    for (var c = 0; c < COLS; c++) {
+      drawTile(c, r, TC[r][c]);
+    }
+  }
+
+  // Wasser
+  for (var r = 9; r < 12; r++) {
+    for (var c = 10; c < 14; c++) {
+      drawTile(c, r, '#4fc3f7', 'rgba(255,255,255,0.3)');
+    }
+  }
+
+  // Weg
+  var path = [[5,5],[5,4],[5,3],[4,3],[3,3],[3,2]];
+  for (var i = 0; i < path.length; i++) {
+    drawTile(path[i][0], path[i][1], '#d4b896', 'rgba(0,0,0,0.1)');
+  }
+
+  // Gebaeude (nach Tiefe sortiert)
+  var sorted = state.buildings.slice().sort(function(a,b) { return (a.col+a.row)-(b.col+b.row); });
+  for (var i = 0; i < sorted.length; i++) drawBuilding(sorted[i]);
+
+  // Villager
+  for (var i = 0; i < state.villagers.length; i++) drawVillager(state.villagers[i]);
+
+  // Bau-Geist
+  if (state.buildMode && state.hoverTile && BUILDING_TYPES[state.buildMode]) {
+    var p = toIso(state.hoverTile.col, state.hoverTile.row);
+    ctx.save();
+    ctx.globalAlpha = 0.5;
+    ctx.font = '32px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(BUILDING_TYPES[state.buildMode].emoji, p.x, p.y + TH/2 + 4);
+    ctx.restore();
+  }
+}
+
+// ============================================================
+// VILLAGER BEWEGUNG
+// ============================================================
+function moveVillagers() {
+  for (var i = 0; i < state.villagers.length; i++) {
+    var v = state.villagers[i];
+    if (v.buildingId !== null) {
+      for (var j = 0; j < state.buildings.length; j++) {
+        if (state.buildings[j].id === v.buildingId) {
+          v.tx = state.buildings[j].col;
+          v.ty = state.buildings[j].row;
+          break;
+        }
+      }
+    } else {
+      if (!v.moving || (Math.abs(v.x - v.tx) < 0.05 && Math.abs(v.y - v.ty) < 0.05)) {
+        v.tx = 4 + Math.floor(Math.random() * 3);
+        v.ty = 4 + Math.floor(Math.random() * 3);
+        v.moving = true;
+      }
+    }
+    v.x += (v.tx - v.x) * 0.04;
+    v.y += (v.ty - v.y) * 0.04;
+  }
+}
+
+// ============================================================
+// PRODUKTION MIT KETTEN
+// ============================================================
+var PRODUCE_INTERVAL = 200; // Ticks pro Produktionszyklus
+
+function produceResources() {
+  state.tick++;
+
+  // Fortschrittsbalken updaten
+  for (var i = 0; i < state.villagers.length; i++) {
+    var v = state.villagers[i];
+    if (v.buildingId !== null) {
+      // Geschwindigkeit haengt vom Hunger ab
+      var speed = v.hunger >= 3 ? 1.0 : v.hunger >= 2 ? 0.7 : v.hunger >= 1 ? 0.4 : 0.1;
+      v.progress = Math.min(100, v.progress + (100 / PRODUCE_INTERVAL) * speed);
+    }
+  }
+
+  if (state.tick % PRODUCE_INTERVAL === 0) {
+    for (var i = 0; i < state.villagers.length; i++) {
+      var v = state.villagers[i];
+      if (v.buildingId === null) continue;
+
+      var building = null;
+      for (var j = 0; j < state.buildings.length; j++) {
+        if (state.buildings[j].id === v.buildingId) { building = state.buildings[j]; break; }
+      }
+      if (!building) continue;
+
+      var chain = CHAINS[building.type];
+      if (!chain || !chain.output) continue;
+
+      // Pruefen ob Eingangsmaterial vorhanden
+      if (chain.input && state.resources[chain.input] < chain.inputAmt) {
+        showNotif('⚠️ ' + building.name + ': kein ' + chain.input + '!');
+        v.progress = 0;
+        continue;
+      }
+
+      // Material verbrauchen und produzieren
+      if (chain.input) {
+        state.resources[chain.input] = Math.max(0, state.resources[chain.input] - chain.inputAmt);
+      }
+      state.resources[chain.output] = Math.min(99, state.resources[chain.output] + chain.outputAmt);
+      v.progress = 0;
+    }
+
+    // Hunger reduzieren
+    for (var i = 0; i < state.villagers.length; i++) {
+      var v = state.villagers[i];
+      if (v.hunger > 0) v.hunger--;
+      if (v.hunger === 0 && state.resources.soup > 0) {
+        state.resources.soup--;
+        v.hunger = 3;
+        showNotif(v.name + ' hat Suppe gegessen 🍲');
+      }
+    }
+
+    // Tag zaehler
+    if (state.tick % (PRODUCE_INTERVAL * 6) === 0) {
+      state.day++;
+      document.getElementById('time-chip').textContent = '⏱ Tag ' + state.day;
+      // Neue Auftraege alle 3 Tage
+      if (state.day % 3 === 0) {
+        state.orders = generateOrders();
+        showNotif('📋 Neue Auftraege verfuegbar!');
+      }
+    }
+
+    updateResourceDisplay();
+    if (state.activeTab === 'orders') renderOrdersTab();
+    if (state.activeTab === 'villagers') renderVillagerTab();
+  }
+}
+
+function updateResourceDisplay() {
+  document.getElementById('res-wood').textContent      = state.resources.wood;
+  document.getElementById('res-stone').textContent     = state.resources.stone;
+  document.getElementById('res-wheat').textContent     = state.resources.wheat;
+  document.getElementById('res-soup').textContent      = state.resources.soup;
+  document.getElementById('res-furniture').textContent = state.resources.furniture;
+  document.getElementById('res-brick').textContent     = state.resources.brick;
+  document.getElementById('xp-val').textContent        = state.xp;
+}
+
+// ============================================================
+// AUFTRAEGE ERFULLEN
+// ============================================================
+function canFulfillOrder(order) {
+  for (var res in order.items) {
+    if ((state.resources[res] || 0) < order.items[res]) return false;
+  }
+  return true;
+}
+
+function fulfillOrder(orderId) {
+  var order = null;
+  for (var i = 0; i < state.orders.length; i++) {
+    if (state.orders[i].id === orderId) { order = state.orders[i]; break; }
+  }
+  if (!order || !canFulfillOrder(order)) return;
+
+  for (var res in order.items) {
+    state.resources[res] = Math.max(0, state.resources[res] - order.items[res]);
+  }
+  state.xp += order.xp;
+  state.orders.splice(state.orders.indexOf(order), 1);
+  // Neuen Auftrag hinzufuegen
+  var tmpl = ORDER_TEMPLATES[Math.floor(Math.random() * ORDER_TEMPLATES.length)];
+  state.orders.push({ id: Date.now(), items: JSON.parse(JSON.stringify(tmpl.items)), xp: tmpl.xp, label: tmpl.label });
+
+  updateResourceDisplay();
+  renderOrdersTab();
+  showNotif('+' + order.xp + ' XP! Auftrag erfullt ⭐');
+}
+
+// ============================================================
+// SPIELSCHLEIFE
+// ============================================================
+function loop() {
+  moveVillagers();
+  produceResources();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+// ============================================================
+// KLICK-HANDLING
+// ============================================================
+canvas.addEventListener('click', function(e) {
+  var rect = canvas.getBoundingClientRect();
+  var px = e.clientX - rect.left;
+  var py = e.clientY - rect.top;
+  var tile = fromIso(px, py);
+
+  if (state.buildMode) {
+    placeBuilding(tile.col, tile.row);
+    return;
+  }
+
+  var clicked = null;
+  for (var i = 0; i < state.buildings.length; i++) {
+    if (state.buildings[i].col === tile.col && state.buildings[i].row === tile.row) {
+      clicked = state.buildings[i];
+      break;
+    }
+  }
+
+  if (clicked) {
+    state.selectedBuilding = clicked.id;
+    state.selectedVillager = null;
+    showBuildingPopup(clicked, px, py);
+    renderVillagerTab();
+    return;
+  }
+
+  state.selectedBuilding = null;
+  hidePopup();
+  renderActiveTab();
+});
+
+canvas.addEventListener('mousemove', function(e) {
+  if (!state.buildMode) return;
+  var rect = canvas.getBoundingClientRect();
+  state.hoverTile = fromIso(e.clientX - rect.left, e.clientY - rect.top);
+});
+
+// ============================================================
+// POPUP
+// ============================================================
+function showBuildingPopup(b, px, py) {
+  var popup = document.getElementById('info-popup');
+  document.getElementById('popup-title').textContent = b.emoji + ' ' + b.name;
+
+  var chain = CHAINS[b.type];
+  var desc = chain ? chain.label : 'Gebaeude';
+  document.getElementById('popup-desc').textContent = desc;
+
+  // Ketten-Info
+  var chainEl = document.getElementById('popup-chain');
+  if (chain && chain.input) {
+    var hasInput = state.resources[chain.input] >= chain.inputAmt;
+    chainEl.textContent = 'Benoetigt: ' + chain.inputAmt + 'x ' + chain.input + ' (' + (state.resources[chain.input] || 0) + ' vorhanden)';
+    chainEl.style.color = hasInput ? '#4a8c42' : '#e05252';
+  } else {
+    chainEl.textContent = '';
+  }
+
+  var actions = document.getElementById('popup-actions');
+  actions.innerHTML = '';
+
+  if (chain && chain.output) {
+    var idleVillagers = state.villagers.filter(function(v) { return v.buildingId === null; });
+    var workers = state.villagers.filter(function(v) { return v.buildingId === b.id; });
+
+    if (idleVillagers.length > 0) {
+      for (var i = 0; i < idleVillagers.length; i++) {
+        (function(v) {
+          var btn = document.createElement('button');
+          btn.className = 'assign-btn';
+          btn.textContent = v.emoji + ' ' + v.name + ' zuweisen';
+          btn.style.pointerEvents = 'all';
+          btn.onclick = function() {
+            v.buildingId = b.id;
+            v.task = chain.label;
+            v.progress = 0;
+            hidePopup();
+            renderActiveTab();
+            showNotif(v.name + ' arbeitet in ' + b.name);
+          };
+          actions.appendChild(btn);
+        })(idleVillagers[i]);
+      }
+    }
+
+    for (var i = 0; i < workers.length; i++) {
+      (function(v) {
+        var btn = document.createElement('button');
+        btn.className = 'remove-btn';
+        btn.textContent = v.emoji + ' ' + v.name + ' abziehen';
+        btn.style.pointerEvents = 'all';
+        btn.onclick = function() {
+          v.buildingId = null;
+          v.task = 'Idle';
+          v.progress = 0;
+          hidePopup();
+          renderActiveTab();
+          showNotif(v.name + ' ist jetzt frei');
+        };
+        actions.appendChild(btn);
+      })(workers[i]);
+    }
+  }
+
+  popup.style.display = 'block';
+  var wrap = document.getElementById('canvas-wrap');
+  var left = px + 12, top = py - 60;
+  if (left + 210 > wrap.clientWidth) left = px - 210;
+  if (top < 0) top = py + 12;
+  popup.style.left = left + 'px';
+  popup.style.top = top + 'px';
+}
+
+function hidePopup() {
+  document.getElementById('info-popup').style.display = 'none';
+}
+
+// ============================================================
+// BAUEN
+// ============================================================
+function placeBuilding(col, row) {
+  var type = state.buildMode;
+  var bt = BUILDING_TYPES[type];
+  if (!bt) return;
+
+  if (state.xp < bt.reqXP) {
+    showNotif('Zu wenig XP! Benoetigt: ' + bt.reqXP);
+    state.buildMode = null; state.hoverTile = null;
+    renderActiveTab(); return;
+  }
+  if (state.resources.wood < bt.costWood || state.resources.stone < bt.costStone) {
+    showNotif('Nicht genug Ressourcen!');
+    state.buildMode = null; state.hoverTile = null;
+    renderActiveTab(); return;
+  }
+  for (var i = 0; i < state.buildings.length; i++) {
+    if (state.buildings[i].col === col && state.buildings[i].row === row) {
+      showNotif('Bereits belegt!'); return;
+    }
+  }
+  if (col < 0 || row < 0 || col >= COLS || row >= ROWS) {
+    showNotif('Ausserhalb!'); return;
+  }
+
+  state.resources.wood  -= bt.costWood;
+  state.resources.stone -= bt.costStone;
+  var maxId = 0;
+  for (var i = 0; i < state.buildings.length; i++) {
+    if (state.buildings[i].id > maxId) maxId = state.buildings[i].id;
+  }
+  var colors = { sawmill:'#c9956b', quarry:'#b0b0c0', farm:'#c8e6a0', kitchen:'#f5c87a', carpentry:'#d4a870', brickyard:'#c8a080', bakery:'#f0d090', well:'#a0c8e8', warehouse:'#d4b896' };
+  state.buildings.push({ id: maxId+1, type: type, col: col, row: row, name: bt.name, emoji: bt.emoji, color: colors[type] || '#d4c890' });
+  state.buildMode = null; state.hoverTile = null;
+  updateResourceDisplay();
+  showNotif(bt.name + ' gebaut!');
+  renderActiveTab();
+}
+
+// ============================================================
+// TABS
+// ============================================================
+function switchTab(tab) {
+  state.activeTab = tab;
+  var btns = document.querySelectorAll('.tab-btn');
+  var tabs = ['villagers', 'orders', 'build', 'chains'];
+  for (var i = 0; i < btns.length; i++) {
+    btns[i].classList.toggle('active', tabs[i] === tab);
+  }
+  renderActiveTab();
+}
+
+function renderActiveTab() {
+  if (state.activeTab === 'villagers') renderVillagerTab();
+  else if (state.activeTab === 'orders') renderOrdersTab();
+  else if (state.activeTab === 'build') renderBuildTab();
+  else renderChainsTab();
+}
+
+function renderVillagerTab() {
+  var html = '';
+  for (var i = 0; i < state.villagers.length; i++) {
+    var v = state.villagers[i];
+    var bg = v.id === 0 ? '#ffe0b2' : v.id === 1 ? '#b2dfdb' : '#f8bbd0';
+    var taskClass = v.buildingId !== null ? 'working' : '';
+    var taskText = v.buildingId !== null ? ('🔨 ' + v.task) : '😴 Idle';
+    var speed = v.hunger >= 3 ? '100%' : v.hunger >= 2 ? '70%' : v.hunger >= 1 ? '40%' : '10%';
+    var dots = '';
+    for (var d = 0; d < 3; d++) {
+      var cls = d < v.hunger ? (v.hunger <= 1 ? 'low' : 'full') : '';
+      dots += '<div class="hunger-dot ' + cls + '"></div>';
+    }
+    html += '<div class="villager-row' + (state.selectedVillager === v.id ? ' selected' : '') + '" onclick="selectVillager(' + v.id + ')">';
+    html += '<div class="v-avatar" style="background:' + bg + '">' + v.emoji + '</div>';
+    html += '<span class="v-name">' + v.name + '</span>';
+    html += '<span class="v-task ' + taskClass + '">' + taskText + '</span>';
+    html += '<span class="v-speed">⚡' + speed + '</span>';
+    html += '<div class="v-hunger">' + dots + '</div>';
+    html += '</div>';
+  }
+  document.getElementById('tab-content').innerHTML = html;
+}
+
+function selectVillager(id) {
+  state.selectedVillager = (state.selectedVillager === id) ? null : id;
+  renderVillagerTab();
+}
+
+function renderOrdersTab() {
+  var html = '';
+  for (var i = 0; i < state.orders.length; i++) {
+    var order = state.orders[i];
+    var ok = canFulfillOrder(order);
+    html += '<div class="order-card' + (ok ? ' completable' : '') + '">';
+    html += '<div class="order-items">' + order.label + '</div>';
+    html += '<span class="order-reward">+' + order.xp + ' XP</span>';
+    html += '<button class="order-btn" onclick="fulfillOrder(' + order.id + ')"' + (ok ? '' : ' disabled') + '>Liefern</button>';
+    html += '</div>';
+  }
+  document.getElementById('tab-content').innerHTML = html;
+}
+
+function renderBuildTab() {
+  var html = '<div class="building-grid">';
+  var keys = Object.keys(BUILDING_TYPES);
+  for (var i = 0; i < keys.length; i++) {
+    var key = keys[i];
+    var bt = BUILDING_TYPES[key];
+    var locked = state.xp < bt.reqXP;
+    var sel = (state.buildMode === key) ? ' selected' : '';
+    var lockCls = locked ? ' locked' : '';
+    var onclick = locked ? '' : ' onclick="startBuild(\'' + key + '\')"';
+    html += '<div class="build-card' + sel + lockCls + '"' + onclick + '>';
+    html += '<span class="build-icon">' + bt.emoji + '</span>';
+    html += '<div><div>' + bt.name + '</div>';
+    html += '<div class="build-cost">🪵' + bt.costWood + ' 🪨' + bt.costStone + (bt.reqXP > 0 ? ' ⭐' + bt.reqXP : '') + '</div></div>';
+    html += '</div>';
+  }
+  html += '</div>';
+  if (state.buildMode) {
+    html += '<p style="margin-top:6px;font-size:11px;color:var(--green-dark);font-weight:700">📍 Klick auf die Karte — <span style="cursor:pointer;text-decoration:underline" onclick="cancelBuild()">abbrechen</span></p>';
+  }
+  document.getElementById('tab-content').innerHTML = html;
+}
+
+function startBuild(type) {
+  state.buildMode = (state.buildMode === type) ? null : type;
+  renderBuildTab();
+}
+function cancelBuild() {
+  state.buildMode = null;
+  state.hoverTile = null;
+  renderBuildTab();
+}
+
+function renderChainsTab() {
+  var html = '';
+  var keys = Object.keys(CHAINS);
+  for (var i = 0; i < keys.length; i++) {
+    var key = keys[i];
+    var c = CHAINS[key];
+    if (!c.output) continue;
+    var bt = BUILDING_TYPES[key];
+    var emoji = bt ? bt.emoji : '🏠';
+    var name = bt ? bt.name : key;
+    html += '<div class="chain-row">';
+    html += '<span>' + emoji + ' ' + name + '</span>';
+    html += '<span class="chain-arrow">→</span>';
+    if (c.input) {
+      var hasEnough = state.resources[c.input] >= c.inputAmt;
+      html += '<span class="chain-step ' + (hasEnough ? 'ready' : 'waiting') + '">' + c.inputAmt + 'x ' + c.input + '</span>';
+      html += '<span class="chain-arrow">→</span>';
+    }
+    html += '<span class="chain-step ready">+' + c.outputAmt + ' ' + c.output + '</span>';
+    html += '</div>';
+  }
+  document.getElementById('tab-content').innerHTML = html;
+}
+
+// ============================================================
+// NOTIFICATION
+// ============================================================
+var notifTimer = null;
+function showNotif(msg) {
+  var el = document.getElementById('notif');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(notifTimer);
+  notifTimer = setTimeout(function() { el.classList.remove('show'); }, 2500);
+}
+
+// ============================================================
+// START
+// ============================================================
+loadGame();
+renderVillagerTab();
+resize();
+loop();
+</script>
+</body>
+</html>

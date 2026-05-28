@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Greendale</title>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- JOIN SCREEN (wird ausgeblendet nach Beitreten) -->
+<div id="join-screen">
+  <div id="join-box">
+    <h1>🌿 Greendale</h1>
+    <p>Tritt einem Valley bei oder erstelle ein neues</p>
+    <input id="player-name-input" type="text" placeholder="Dein Name" maxlength="20">
+    <input id="valley-input" type="text" placeholder="Valley-Name (z.B. meintal)" maxlength="30">
+    <button id="join-btn" onclick="joinValley()">🏡 Beitreten</button>
+    <div id="join-error"></div>
+  </div>
+</div>
+
+<!-- HAUPTSPIEL -->
+<div id="game-container" style="display:none">
+
+  <!-- TOPBAR -->
+  <div id="topbar">
+    <span class="game-title">🌿 Greendale</span>
+    <div class="res-chip"><span>🪵</span><span class="res-val" id="res-wood">24</span></div>
+    <div class="res-chip"><span>🪨</span><span class="res-val" id="res-stone">12</span></div>
+    <div class="res-chip"><span>🌾</span><span class="res-val" id="res-wheat">8</span></div>
+    <div class="res-chip"><span>🍲</span><span class="res-val" id="res-soup">4</span></div>
+    <div class="res-chip"><span>🪑</span><span class="res-val" id="res-furniture">0</span></div>
+    <div class="res-chip"><span>🧱</span><span class="res-val" id="res-brick">0</span></div>
+    <div id="xp-chip">⭐ <span id="xp-val">0</span></div>
+    <div id="time-chip">⏱ Tag 1</div>
+    <div id="valley-chip">🏔 <span id="valley-name-display">-</span></div>
+    <div id="online-chip">👥 <span id="online-count">1</span></div>
+    <button id="save-btn" onclick="saveGame()">💾</button>
+  </div>
+
+  <!-- HAUPTBEREICH -->
+  <div id="main-row">
+
+    <!-- CANVAS SEITE -->
+    <div id="canvas-col">
+      <div id="canvas-wrap">
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- GEBÄUDE POPUP -->
+        <div id="info-popup">
+          <h3 id="popup-title"></h3>
+          <p id="popup-desc"></p>
+          <div class="chain-info" id="popup-chain"></div>
+          <div id="popup-actions"></div>
+        </div>
+
+        <!-- BENACHRICHTIGUNG -->
+        <div id="notif"></div>
+
+        <!-- VERBINDUNGSSTATUS -->
+        <div id="connection-status"></div>
+      </div>
+
+      <!-- BOTTOM PANEL -->
+      <div id="bottom-panel">
+        <div id="tabs">
+          <button class="tab-btn active" onclick="switchTab('villagers')">👤 Villager</button>
+          <button class="tab-btn" onclick="switchTab('build')">🏗 Bauen</button>
+          <button class="tab-btn" onclick="switchTab('chains')">⛓ Ketten</button>
+          <button class="tab-btn" onclick="switchTab('chat')">💬 Chat</button>
+        </div>
+        <div id="tab-content"></div>
+      </div>
+    </div>
+
+    <!-- RECHTE SIDEBAR -->
+    <div id="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-title">📋 Valley-Aufträge</div>
+        <div id="sidebar-orders"></div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-title">👥 Dein Dorf</div>
+        <div id="sidebar-villagers"></div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-title">🏔 Mitspieler</div>
+        <div id="sidebar-players"></div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-title">📦 Lager</div>
+        <div class="res-grid" id="sidebar-resources"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- HIRE POPUP -->
+<div id="hire-popup">
+  <h2 id="hire-popup-title">🎉 Neuer Mitarbeiter!</h2>
+  <p id="hire-popup-desc"></p>
+  <button onclick="closeHirePopup()">Willkommen! 🎉</button>
+</div>
+
+<!-- SCRIPTS (Reihenfolge wichtig!) -->
+<script src="js/data.js"></script>
+<script src="js/state.js"></script>
+<script src="js/draw.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/network.js"></script>
+<script src="js/game.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,13 @@
+Wir bauen zusammen ein Browserspiel namens Greendale. Es ist inspiriert von Everdale (Supercell) – ein friedliches Dorfaufbau-Spiel mit Ressourcenmanagement, Villager-Zuweisung, Produktionsketten und einem Valley-System für bis zu 9-10 Spieler.
+Tech-Stack:
+
+Phase 1–2: Reines HTML/CSS/JS Artifact im Browser
+Phase 3: Node.js + WebSockets für Multiplayer (Railway Hosting)
+Phase 4: Vercel für Frontend, später Electron für .exe
+
+Stil: Isometrische Perspektive, bunt & gemütlich, Everdale-ähnlich
+Entwicklungsstand: Ende Phase 2
+Was zuletzt gemacht wurde: Produktionsketten, neue Fabriken
+Was als nächstes geplant ist: Phase 3
+Meine Rolle: Ich (der User) will verstehen was gebaut wird, mache aber kaum selbst Code. Erkläre kurz was du tust, aber halte es einfach.
+Hier ist der aktuelle Code:
