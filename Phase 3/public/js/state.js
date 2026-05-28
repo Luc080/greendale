@@ -3,20 +3,22 @@
 // Abhängig von: data.js
 // ============================================================
 
+var SAVE_KEY_PREFIX = 'greendale_v6_'; // v6 = neue Version, sauberer Neustart
+
 var state = {
-  playerName:  'Spieler',
-  resources:   { wood: 24, stone: 12, wheat: 8, soup: 4, furniture: 0, brick: 0, bread: 0, water: 0 },
-  xp:          0,
-  day:         1,
-  tick:        0,
-  selectedBuilding:  null,
-  selectedVillager:  null,
-  buildMode:         null,
-  activeTab:         'villagers',
-  hoverTile:         null,
-  orders:            [],     // Valley-Aufträge (vom Server)
-  nextVillagerId:    3,
-  prevXP:            0,
+  playerName:       'Spieler',
+  resources:        { wood: 24, stone: 12, wheat: 8, soup: 4, furniture: 0, brick: 0, bread: 0, water: 0 },
+  xp:               0,
+  day:              1,
+  tick:             0,
+  selectedBuilding: null,
+  selectedVillager: null,
+  buildMode:        null,
+  activeTab:        'villagers',
+  hoverTile:        null,
+  orders:           [],   // Valley-Aufträge (vom Server)
+  nextVillagerId:   3,
+  prevXP:           0,
   villagers: [
     { id: 0, name: 'Lena',  skin: '#f4c490', hair: '#8b4a1a', shirt: '#e05a8a', pants: '#5a7abf', emoji: '👧', task: 'Idle', hunger: 5, x: 5, y: 5, tx: 5, ty: 5, vx: 0, vy: 0, buildingId: null, progress: 0, anim: 0 },
     { id: 1, name: 'Tom',   skin: '#e8a870', hair: '#3a2010', shirt: '#4a8adf', pants: '#4a5a70', emoji: '👦', task: 'Idle', hunger: 5, x: 6, y: 5, tx: 6, ty: 5, vx: 0, vy: 0, buildingId: null, progress: 0, anim: 0 },
@@ -33,44 +35,126 @@ var state = {
 };
 
 // ============================================================
-// SAVE / LOAD (localStorage)
+// SAVE / LOAD (localStorage) – sauber und robust
 // ============================================================
 function saveGame() {
   try {
     var toSave = {
-      playerName:       state.playerName,
-      resources:        state.resources,
-      xp:               state.xp,
-      day:              state.day,
-      buildings:        state.buildings,
-      villagers:        state.villagers,
-      nextVillagerId:   state.nextVillagerId
+      version:        6,
+      playerName:     state.playerName,
+      resources:      state.resources,
+      xp:             state.xp,
+      day:            state.day,
+      tick:           state.tick,
+      nextVillagerId: state.nextVillagerId,
+      prevXP:         state.prevXP,
+      // Villager: nur persistente Felder speichern (kein vx/vy/anim)
+      villagers: state.villagers.map(function(v) {
+        return {
+          id:         v.id,
+          name:       v.name,
+          emoji:      v.emoji,
+          skin:       v.skin,
+          hair:       v.hair,
+          shirt:      v.shirt,
+          pants:      v.pants,
+          task:       v.task,
+          hunger:     v.hunger,
+          buildingId: v.buildingId,
+          progress:   v.progress,
+          // Position merken damit Villager nach Reload nicht teleportieren
+          x: v.x, y: v.y, tx: v.tx, ty: v.ty
+        };
+      }),
+      buildings: state.buildings
     };
-    localStorage.setItem('greendale_v5_' + state.playerName, JSON.stringify(toSave));
+    var key = SAVE_KEY_PREFIX + state.playerName;
+    localStorage.setItem(key, JSON.stringify(toSave));
     showNotif('💾 Gespeichert!');
+    return true;
   } catch(e) {
-    showNotif('Speichern fehlgeschlagen');
+    showNotif('⚠️ Speichern fehlgeschlagen: ' + e.message);
+    return false;
   }
 }
 
 function loadGame(playerName) {
   try {
-    var key  = 'greendale_v5_' + playerName;
-    var s    = localStorage.getItem(key);
-    if (s) {
-      var d = JSON.parse(s);
-      state.playerName      = d.playerName      || playerName;
-      state.resources       = d.resources       || state.resources;
-      state.xp              = d.xp              || 0;
-      state.day             = d.day             || 1;
-      state.buildings       = d.buildings       || state.buildings;
-      state.villagers       = d.villagers       || state.villagers;
-      state.nextVillagerId  = d.nextVillagerId  || state.villagers.length;
-      showNotif('✅ Spielstand von ' + playerName + ' geladen!');
-      return true;
+    var key = SAVE_KEY_PREFIX + playerName;
+    var raw = localStorage.getItem(key);
+    if (!raw) return false;
+
+    var d = JSON.parse(raw);
+
+    // Pflichtfelder prüfen – korrupte Saves abfangen
+    if (!d || typeof d !== 'object') return false;
+    if (!Array.isArray(d.villagers) || !Array.isArray(d.buildings)) return false;
+
+    state.playerName      = d.playerName      || playerName;
+    state.xp              = typeof d.xp === 'number'  ? d.xp  : 0;
+    state.day             = typeof d.day === 'number'  ? d.day : 1;
+    state.tick            = typeof d.tick === 'number' ? d.tick: 0;
+    state.nextVillagerId  = typeof d.nextVillagerId === 'number' ? d.nextVillagerId : d.villagers.length;
+    state.prevXP          = typeof d.prevXP === 'number' ? d.prevXP : state.xp;
+
+    // Ressourcen: bekannte Keys übernehmen, unbekannte ignorieren
+    var defaultRes = { wood: 0, stone: 0, wheat: 0, soup: 0, furniture: 0, brick: 0, bread: 0, water: 0 };
+    if (d.resources && typeof d.resources === 'object') {
+      for (var k in defaultRes) {
+        state.resources[k] = typeof d.resources[k] === 'number' ? d.resources[k] : 0;
+      }
     }
-  } catch(e) {}
-  return false;
+
+    // Villager: fehlende Felder mit Defaults auffüllen (robuster gegen alte Saves)
+    state.villagers = d.villagers.map(function(v) {
+      return {
+        id:         typeof v.id === 'number' ? v.id : 0,
+        name:       v.name  || 'Villager',
+        emoji:      v.emoji || '🧑',
+        skin:       v.skin  || '#f4c490',
+        hair:       v.hair  || '#5a3010',
+        shirt:      v.shirt || '#4a8adf',
+        pants:      v.pants || '#3a4a60',
+        task:       v.task  || 'Idle',
+        hunger:     typeof v.hunger === 'number' ? v.hunger : MAX_HUNGER,
+        buildingId: v.buildingId !== undefined ? v.buildingId : null,
+        progress:   typeof v.progress === 'number' ? v.progress : 0,
+        x:          typeof v.x  === 'number' ? v.x  : 5,
+        y:          typeof v.y  === 'number' ? v.y  : 5,
+        tx:         typeof v.tx === 'number' ? v.tx : 5,
+        ty:         typeof v.ty === 'number' ? v.ty : 5,
+        vx: 0, vy: 0, anim: 0   // Runtime-Felder immer zurücksetzen
+      };
+    });
+
+    // Gebäude: fehlende Felder auffüllen
+    state.buildings = d.buildings.map(function(b) {
+      return {
+        id:   typeof b.id  === 'number' ? b.id  : 0,
+        type: b.type || 'townhall',
+        col:  typeof b.col === 'number' ? b.col : 0,
+        row:  typeof b.row === 'number' ? b.row : 0
+      };
+    });
+
+    showNotif('✅ ' + playerName + ' geladen – Tag ' + state.day);
+    return true;
+
+  } catch(e) {
+    console.warn('loadGame Fehler:', e);
+    return false;
+  }
+}
+
+// Autosave alle 60 Sekunden
+var autoSaveTimer = null;
+function startAutoSave() {
+  clearInterval(autoSaveTimer);
+  autoSaveTimer = setInterval(function() {
+    if (state.playerName && state.playerName !== 'Spieler') {
+      saveGame();
+    }
+  }, 60000);
 }
 
 // ============================================================
@@ -79,7 +163,7 @@ function loadGame(playerName) {
 function tickProduction() {
   state.tick++;
 
-  // Fortschrittsbalken
+  // Fortschrittsbalken kontinuierlich updaten
   for (var i = 0; i < state.villagers.length; i++) {
     var v = state.villagers[i];
     if (v.buildingId !== null) {
@@ -100,7 +184,7 @@ function tickProduction() {
       for (var j = 0; j < state.buildings.length; j++) {
         if (state.buildings[j].id === v.buildingId) { bld = state.buildings[j]; break; }
       }
-      if (!bld) continue;
+      if (!bld) { v.buildingId = null; continue; } // Gebäude weg → Villager befreien
 
       var ch = CHAINS[bld.type];
       if (!ch || !ch.output) continue;
@@ -110,18 +194,24 @@ function tickProduction() {
         continue;
       }
       if (ch.input) state.resources[ch.input] = Math.max(0, state.resources[ch.input] - ch.inputAmt);
-      state.resources[ch.output] = Math.min(99, state.resources[ch.output] + ch.outputAmt);
+      state.resources[ch.output] = Math.min(999, (state.resources[ch.output] || 0) + ch.outputAmt);
       v.progress = 0;
     }
 
-    // Hunger (nur alle HUNGER_INTERVAL Zyklen)
+    // Hunger (alle HUNGER_INTERVAL Produktionszyklen)
     if (cc % HUNGER_INTERVAL === 0) {
       for (var i = 0; i < state.villagers.length; i++) {
         var v = state.villagers[i];
         if (v.hunger > 0) v.hunger--;
-        if (v.hunger <= 1 && state.resources.soup > 0) {
-          state.resources.soup--;
-          v.hunger = MAX_HUNGER;
+        // Suppe oder Brot als Nahrung
+        if (v.hunger <= 1) {
+          if (state.resources.soup > 0) {
+            state.resources.soup--;
+            v.hunger = MAX_HUNGER;
+          } else if (state.resources.bread > 0) {
+            state.resources.bread--;
+            v.hunger = MAX_HUNGER - 1;
+          }
         }
       }
     }
@@ -132,18 +222,21 @@ function tickProduction() {
       document.getElementById('time-chip').textContent = '⏱ Tag ' + state.day;
     }
 
-    // Neuer Villager verfügbar?
     checkNewVillager();
     updateResourceDisplay();
     renderSidebar();
     renderActiveTab();
-
-    // Zustand an Server senden
     sendStateUpdate();
   }
 }
 
+// ============================================================
+// VILLAGER – unbegrenzt, dynamische Generierung
+// ============================================================
 function checkNewVillager() {
+  var totalCount = state.villagers.length + 1; // wie viele schon da sind + nächster
+
+  // Pool-Villager prüfen
   for (var i = 0; i < VILLAGER_POOL.length; i++) {
     var vp = VILLAGER_POOL[i];
     if (vp.reqXP > 0 && state.prevXP < vp.reqXP && state.xp >= vp.reqXP) {
@@ -151,33 +244,110 @@ function checkNewVillager() {
       for (var j = 0; j < state.villagers.length; j++) {
         if (state.villagers[j].name === vp.name) { hired = true; break; }
       }
-      if (!hired) {
-        document.getElementById('hire-popup-title').textContent = '🎉 Neuer Mitarbeiter!';
-        document.getElementById('hire-popup-desc').textContent = vp.emoji + ' ' + vp.name + ' moechte deinem Dorf beitreten!\nIn der Sidebar "Einstellen" klicken.';
-        document.getElementById('hire-popup').style.display = 'block';
-      }
+      if (!hired) showVillagerPopup(vp.emoji, vp.name);
     }
   }
+
+  // Extra-Villager jenseits des Pools
+  if (state.villagers.length >= VILLAGER_POOL.length) {
+    var idx      = state.villagers.length; // Index des nächsten
+    var threshold = getExtraVillagerXP(idx);
+    if (state.prevXP < threshold && state.xp >= threshold) {
+      var extra = generateExtraVillager(idx);
+      showVillagerPopup(extra.emoji, extra.name);
+    }
+  }
+
+  // Level-Anzeige aktualisieren
+  updateLevelDisplay();
   state.prevXP = state.xp;
+}
+
+function showVillagerPopup(emoji, name) {
+  document.getElementById('hire-popup-title').textContent = '🎉 Neuer Mitarbeiter!';
+  document.getElementById('hire-popup-desc').textContent  =
+    emoji + ' ' + name + ' moechte deinem Dorf beitreten!\nIn der Sidebar "Einstellen" klicken.';
+  document.getElementById('hire-popup').style.display = 'block';
 }
 
 function closeHirePopup() {
   document.getElementById('hire-popup').style.display = 'none';
 }
 
+// Generiert einen zufälligen Villager jenseits des festen Pools
+function generateExtraVillager(idx) {
+  var ni = idx % VILLAGER_NAMES_EXTRA.length;
+  var ei = idx % VILLAGER_EMOJIS.length;
+  var si = idx % VILLAGER_SHIRTS.length;
+  var pi = idx % VILLAGER_PANTS.length;
+  var skins = ['#f4c490','#e8a870','#c8906a','#f0d0a0','#f8e0c0','#d0a880','#c09060'];
+  var hairs  = ['#8b4a1a','#3a2010','#1a0a00','#c8a030','#e8c840','#202020','#c05020'];
+  return {
+    name:  VILLAGER_NAMES_EXTRA[ni],
+    emoji: VILLAGER_EMOJIS[ei],
+    skin:  skins[idx % skins.length],
+    hair:  hairs[idx % hairs.length],
+    shirt: VILLAGER_SHIRTS[si],
+    pants: VILLAGER_PANTS[pi],
+    reqXP: getExtraVillagerXP(idx)
+  };
+}
+
 function hireVillager(idx) {
-  var vp = VILLAGER_POOL[idx];
+  var vp;
+  if (idx < VILLAGER_POOL.length) {
+    vp = VILLAGER_POOL[idx];
+  } else {
+    vp = generateExtraVillager(idx);
+  }
   if (state.xp < vp.reqXP) { showNotif('Zu wenig XP!'); return; }
+
+  // Prüfen ob schon eingestellt (anhand Name)
+  for (var i = 0; i < state.villagers.length; i++) {
+    if (state.villagers[i].name === vp.name) { showNotif(vp.name + ' ist schon da!'); return; }
+  }
+
   state.villagers.push({
-    id: state.nextVillagerId++, name: vp.name, emoji: vp.emoji,
-    skin: vp.skin, hair: vp.hair, shirt: vp.shirt, pants: vp.pants,
-    task: 'Idle', hunger: MAX_HUNGER,
-    x: 5, y: 5, tx: 5, ty: 5, vx: 0, vy: 0,
-    buildingId: null, progress: 0, anim: 0
+    id:         state.nextVillagerId++,
+    name:       vp.name,
+    emoji:      vp.emoji,
+    skin:       vp.skin,
+    hair:       vp.hair,
+    shirt:      vp.shirt,
+    pants:      vp.pants,
+    task:       'Idle',
+    hunger:     MAX_HUNGER,
+    x: 5, y: 5, tx: 5, ty: 5,
+    vx: 0, vy: 0,
+    buildingId: null,
+    progress:   0,
+    anim:       0
   });
   showNotif(vp.name + ' ist beigetreten! 🎉');
   renderSidebar();
   renderActiveTab();
+}
+
+// ============================================================
+// LEVEL-ANZEIGE
+// ============================================================
+function updateLevelDisplay() {
+  var lvl     = getLevel(state.xp);
+  var nextXP  = getXPForNextLevel(state.xp);
+  var prevXP  = LEVEL_THRESHOLDS[lvl - 1] || 0;
+
+  // Level-Chip
+  var lvlEl = document.getElementById('level-chip');
+  if (lvlEl) lvlEl.textContent = '🏅 Lvl ' + lvl;
+
+  // Fortschrittsbalken
+  var fillEl = document.getElementById('level-bar-fill');
+  if (fillEl) {
+    var pct = nextXP
+      ? Math.round(((state.xp - prevXP) / (nextXP - prevXP)) * 100)
+      : 100;
+    fillEl.style.width = pct + '%';
+  }
 }
 
 // ============================================================
@@ -199,8 +369,9 @@ function moveVillagers() {
     } else {
       var dx = v.x - v.tx, dy = v.y - v.ty;
       if (Math.sqrt(dx*dx + dy*dy) < ARRIVE_DIST) {
-        v.tx = 3.5 + Math.random() * 4;
-        v.ty = 3.5 + Math.random() * 4;
+        // Wandern über grössere Karte (COLS/ROWS aus data.js)
+        v.tx = 2 + Math.random() * (COLS - 4);
+        v.ty = 2 + Math.random() * (ROWS - 4);
       }
     }
 
@@ -210,18 +381,22 @@ function moveVillagers() {
     var speed = v.buildingId !== null ? ACCEL * 1.4 : ACCEL;
     var slowF = Math.min(1, d * 2);
     if (d > ARRIVE_DIST) {
-      v.vx += (ex/d) * speed * slowF;
-      v.vy += (ey/d) * speed * slowF;
+      v.vx += (ex / d) * speed * slowF;
+      v.vy += (ey / d) * speed * slowF;
     }
 
     // Reibung + Max-Speed
     v.vx *= FRICTION;
     v.vy *= FRICTION;
     var vm = Math.sqrt(v.vx*v.vx + v.vy*v.vy);
-    if (vm > 0.06) { v.vx = (v.vx/vm)*0.06; v.vy = (v.vy/vm)*0.06; }
+    if (vm > 0.04) { v.vx = (v.vx/vm)*0.04; v.vy = (v.vy/vm)*0.04; }
 
     v.x += v.vx;
     v.y += v.vy;
+
+    // Karte nicht verlassen
+    v.x = Math.max(0, Math.min(COLS - 1, v.x));
+    v.y = Math.max(0, Math.min(ROWS - 1, v.y));
   }
 }
 
@@ -234,11 +409,11 @@ function placeBuilding(col, row) {
   if (!bt) return;
 
   if (state.xp < bt.reqXP) {
-    showNotif('Benoetigt ⭐' + bt.reqXP);
+    showNotif('Benötigt ⭐' + bt.reqXP + ' XP (Level ' + getLevel(bt.reqXP) + ')');
     state.buildMode = null; state.hoverTile = null; renderActiveTab(); return;
   }
   if (state.resources.wood < bt.costWood || state.resources.stone < bt.costStone) {
-    showNotif('Nicht genug Ressourcen!');
+    showNotif('Nicht genug Ressourcen! 🪵' + bt.costWood + ' 🪨' + bt.costStone);
     state.buildMode = null; state.hoverTile = null; renderActiveTab(); return;
   }
   for (var i = 0; i < state.buildings.length; i++) {
@@ -247,7 +422,7 @@ function placeBuilding(col, row) {
     }
   }
   if (col < 0 || row < 0 || col >= COLS || row >= ROWS) {
-    showNotif('Ausserhalb!'); return;
+    showNotif('Ausserhalb der Karte!'); return;
   }
 
   state.resources.wood  -= bt.costWood;
@@ -259,13 +434,13 @@ function placeBuilding(col, row) {
   updateResourceDisplay();
   renderActiveTab();
   showNotif(bt.name + ' gebaut! ✅');
+  saveGame(); // nach jedem Bau sofort speichern
 }
 
 // ============================================================
 // AUFTRAG ERFÜLLEN (via Server)
 // ============================================================
 function fulfillOrder(orderId) {
-  // Prüfen ob Ressourcen reichen
   var order = null;
   for (var i = 0; i < state.orders.length; i++) {
     if (state.orders[i].id === orderId) { order = state.orders[i]; break; }
@@ -278,12 +453,10 @@ function fulfillOrder(orderId) {
     }
   }
 
-  // Ressourcen abziehen
   for (var res in order.items) {
     state.resources[res] = Math.max(0, state.resources[res] - order.items[res]);
   }
 
-  // An Server melden (der updatet die Valley-Aufträge für alle)
   networkFulfillOrder(orderId);
   updateResourceDisplay();
 }
@@ -299,4 +472,5 @@ function updateResourceDisplay() {
   document.getElementById('res-furniture').textContent = state.resources.furniture;
   document.getElementById('res-brick').textContent     = state.resources.brick;
   document.getElementById('xp-val').textContent        = state.xp;
+  updateLevelDisplay();
 }

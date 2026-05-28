@@ -17,15 +17,15 @@ var CHAINS = {
 };
 
 var BUILDING_TYPES = {
-  sawmill:   { name: 'Saegewerk',  emoji: '🪓', costWood: 0,  costStone: 5,  reqXP: 0  },
-  quarry:    { name: 'Steinbruch', emoji: '⛏',  costWood: 6,  costStone: 0,  reqXP: 0  },
-  farm:      { name: 'Farm',       emoji: '🌾', costWood: 4,  costStone: 0,  reqXP: 0  },
-  kitchen:   { name: 'Kueche',     emoji: '🍲', costWood: 8,  costStone: 4,  reqXP: 0  },
-  carpentry: { name: 'Zimmerei',   emoji: '🪑', costWood: 12, costStone: 6,  reqXP: 20 },
-  brickyard: { name: 'Ziegelei',   emoji: '🧱', costWood: 8,  costStone: 12, reqXP: 20 },
-  bakery:    { name: 'Baeckerei',  emoji: '🥖', costWood: 10, costStone: 8,  reqXP: 40 },
-  well:      { name: 'Brunnen',    emoji: '🪣', costWood: 6,  costStone: 10, reqXP: 10 },
-  warehouse: { name: 'Lager',      emoji: '📦', costWood: 10, costStone: 8,  reqXP: 0  }
+  sawmill:   { name: 'Saegewerk',  emoji: '🪓', costWood: 0,  costStone: 5,  reqXP: 0   },
+  quarry:    { name: 'Steinbruch', emoji: '⛏',  costWood: 6,  costStone: 0,  reqXP: 0   },
+  farm:      { name: 'Farm',       emoji: '🌾', costWood: 4,  costStone: 0,  reqXP: 0   },
+  kitchen:   { name: 'Kueche',     emoji: '🍲', costWood: 8,  costStone: 4,  reqXP: 0   },
+  carpentry: { name: 'Zimmerei',   emoji: '🪑', costWood: 12, costStone: 6,  reqXP: 80  },
+  brickyard: { name: 'Ziegelei',   emoji: '🧱', costWood: 8,  costStone: 12, reqXP: 80  },
+  bakery:    { name: 'Baeckerei',  emoji: '🥖', costWood: 10, costStone: 8,  reqXP: 180 },
+  well:      { name: 'Brunnen',    emoji: '🪣', costWood: 6,  costStone: 10, reqXP: 40  },
+  warehouse: { name: 'Lager',      emoji: '📦', costWood: 10, costStone: 8,  reqXP: 0   }
 };
 
 // Gebäude-Farben (gemütlicher Stil)
@@ -42,16 +42,47 @@ var BSTYLE = {
   warehouse: { wall: '#d4b896', roof: '#6b4a2a', accent: '#f0d4b4' }
 };
 
-// Villager-Pool (Hauttöne, Haare, Kleider)
+// ============================================================
+// VILLAGER POOL – unbegrenzt, XP-Kurve wird steiler
+// ============================================================
 var VILLAGER_POOL = [
-  { name: 'Lena',  emoji: '👧', skin: '#f4c490', hair: '#8b4a1a', shirt: '#e05a8a', pants: '#5a7abf', reqXP: 0   },
-  { name: 'Tom',   emoji: '👦', skin: '#e8a870', hair: '#3a2010', shirt: '#4a8adf', pants: '#4a5a70', reqXP: 0   },
-  { name: 'Maria', emoji: '👩', skin: '#c8906a', hair: '#1a0a00', shirt: '#e06030', pants: '#705040', reqXP: 0   },
-  { name: 'Felix', emoji: '🧑', skin: '#f0d0a0', hair: '#c8a030', shirt: '#40a060', pants: '#304860', reqXP: 30  },
-  { name: 'Sara',  emoji: '👱', skin: '#f8e0c0', hair: '#e8c840', shirt: '#c050c0', pants: '#604080', reqXP: 60  },
-  { name: 'Max',   emoji: '👨', skin: '#d0a880', hair: '#202020', shirt: '#506080', pants: '#303848', reqXP: 100 },
-  { name: 'Klara', emoji: '🧒', skin: '#f0c8a0', hair: '#c05020', shirt: '#e0a020', pants: '#806020', reqXP: 150 }
+  { name: 'Lena',    emoji: '👧', skin: '#f4c490', hair: '#8b4a1a', shirt: '#e05a8a', pants: '#5a7abf', reqXP: 0    },
+  { name: 'Tom',     emoji: '👦', skin: '#e8a870', hair: '#3a2010', shirt: '#4a8adf', pants: '#4a5a70', reqXP: 0    },
+  { name: 'Maria',   emoji: '👩', skin: '#c8906a', hair: '#1a0a00', shirt: '#e06030', pants: '#705040', reqXP: 0    },
+  { name: 'Felix',   emoji: '🧑', skin: '#f0d0a0', hair: '#c8a030', shirt: '#40a060', pants: '#304860', reqXP: 80   },
+  { name: 'Sara',    emoji: '👱', skin: '#f8e0c0', hair: '#e8c840', shirt: '#c050c0', pants: '#604080', reqXP: 180  },
+  { name: 'Max',     emoji: '👨', skin: '#d0a880', hair: '#202020', shirt: '#506080', pants: '#303848', reqXP: 320  },
+  { name: 'Klara',   emoji: '🧒', skin: '#f0c8a0', hair: '#c05020', shirt: '#e0a020', pants: '#806020', reqXP: 500  },
+  { name: 'Bruno',   emoji: '🧔', skin: '#c8a070', hair: '#2a1a00', shirt: '#7a3a20', pants: '#3a2810', reqXP: 720  },
+  { name: 'Hanna',   emoji: '👩', skin: '#f2d0b0', hair: '#d04020', shirt: '#30a0a0', pants: '#205060', reqXP: 1000 },
+  { name: 'Lukas',   emoji: '👦', skin: '#e0c090', hair: '#101010', shirt: '#8060c0', pants: '#403060', reqXP: 1350 },
+  { name: 'Emma',    emoji: '👧', skin: '#f6dfc0', hair: '#b07030', shirt: '#d06080', pants: '#804060', reqXP: 1760 },
+  { name: 'Noah',    emoji: '🧑', skin: '#d8a878', hair: '#181008', shirt: '#206040', pants: '#183828', reqXP: 2250 },
+  { name: 'Mia',     emoji: '👩', skin: '#f0c8a8', hair: '#c89030', shirt: '#e08020', pants: '#704010', reqXP: 2820 },
+  { name: 'Jonas',   emoji: '👨', skin: '#c89060', hair: '#080808', shirt: '#304870', pants: '#202838', reqXP: 3500 },
+  { name: 'Sophia',  emoji: '👱', skin: '#fce0c0', hair: '#f0d040', shirt: '#a030d0', pants: '#602080', reqXP: 4300 }
 ];
+
+// Dynamische Villager-Generierung für Level jenseits des Pools
+// Wird in state.js verwendet
+var VILLAGER_NAMES_EXTRA = [
+  'Alex','Robin','Chris','Sam','Dana','Jordan','Taylor','Morgan','Casey','Quinn',
+  'Avery','Reese','Blake','Cameron','Drew','Hayden','Jamie','Kendall','Logan','Riley'
+];
+var VILLAGER_EMOJIS = ['🧑','👦','👧','👩','👨','👱','🧔','🧒'];
+var VILLAGER_SHIRTS = ['#e05a8a','#4a8adf','#e06030','#40a060','#c050c0','#506080','#e0a020','#30a0a0','#8060c0','#206040'];
+var VILLAGER_PANTS  = ['#5a7abf','#4a5a70','#705040','#304860','#604080','#303848','#806020','#205060','#403060','#183828'];
+
+// XP-Schwelle für den n-ten Villager (ab Index 15)
+function getExtraVillagerXP(index) {
+  // Basis: 4300, danach +1000, +1200, +1400 ... (stetig steiler)
+  var base = 4300;
+  var extra = 0;
+  for (var i = 15; i < index; i++) {
+    extra += 1000 + (i - 15) * 200;
+  }
+  return base + extra;
+}
 
 var ORDER_TEMPLATES = [
   { items: { wood: 5 },               xp: 10, label: '5x Holz'              },
@@ -74,9 +105,45 @@ function generateOrders() {
   return [makeOrder(0), makeOrder(1), makeOrder(2), makeOrder(3)];
 }
 
-// Karten-Konstanten
-var TW = 64, TH = 32, COLS = 14, ROWS = 12;
-var PRODUCE_INTERVAL = 220;
-var HUNGER_INTERVAL  = 10;
+// ============================================================
+// KARTEN- UND PHYSIK-KONSTANTEN
+// ============================================================
+// Karte grösser: mehr Cols/Rows, grössere Tiles
+var TW = 80, TH = 40, COLS = 20, ROWS = 16;
+
+// Produktion deutlich verlangsamt (war 220)
+var PRODUCE_INTERVAL = 480;
+
+// Hunger seltener (war 10)
+var HUNGER_INTERVAL = 20;
+
 var MAX_HUNGER = 5;
-var FRICTION = 0.82, ACCEL = 0.018, ARRIVE_DIST = 0.08;
+
+// Villager langsamer (war FRICTION=0.82, ACCEL=0.018)
+var FRICTION    = 0.88;
+var ACCEL       = 0.008;
+var ARRIVE_DIST = 0.12;
+
+// ============================================================
+// LEVEL-SYSTEM
+// XP-Schwellen pro Level (für Level-Anzeige in ui.js)
+// ============================================================
+var LEVEL_THRESHOLDS = [
+  0, 50, 130, 250, 420, 650, 950, 1320, 1780, 2350,
+  3050, 3900, 4920, 6130, 7550, 9200, 11100, 13300, 15800, 18700
+];
+
+function getLevel(xp) {
+  var lvl = 1;
+  for (var i = 0; i < LEVEL_THRESHOLDS.length; i++) {
+    if (xp >= LEVEL_THRESHOLDS[i]) lvl = i + 1;
+    else break;
+  }
+  return lvl;
+}
+
+function getXPForNextLevel(xp) {
+  var lvl = getLevel(xp);
+  if (lvl >= LEVEL_THRESHOLDS.length) return null; // Max-Level
+  return LEVEL_THRESHOLDS[lvl]; // nächste Schwelle
+}

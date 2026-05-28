@@ -9,7 +9,7 @@
 </head>
 <body>
 
-<!-- JOIN SCREEN (wird ausgeblendet nach Beitreten) -->
+<!-- JOIN SCREEN -->
 <div id="join-screen">
   <div id="join-box">
     <h1>🌿 Greendale</h1>
@@ -34,10 +34,16 @@
     <div class="res-chip"><span>🪑</span><span class="res-val" id="res-furniture">0</span></div>
     <div class="res-chip"><span>🧱</span><span class="res-val" id="res-brick">0</span></div>
     <div id="xp-chip">⭐ <span id="xp-val">0</span></div>
+    <div id="level-chip">🏅 Lvl 1</div>
     <div id="time-chip">⏱ Tag 1</div>
     <div id="valley-chip">🏔 <span id="valley-name-display">-</span></div>
     <div id="online-chip">👥 <span id="online-count">1</span></div>
     <button id="save-btn" onclick="saveGame()">💾</button>
+  </div>
+
+  <!-- LEVEL-FORTSCHRITTSBALKEN -->
+  <div id="level-bar-wrap">
+    <div id="level-bar-fill" style="width:0%"></div>
   </div>
 
   <!-- HAUPTBEREICH -->
