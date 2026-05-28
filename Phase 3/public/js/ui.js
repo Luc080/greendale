@@ -72,7 +72,6 @@ function renderBuildTab() {
     var sel    = state.buildMode === k ? ' selected' : '';
     var lk     = locked ? ' locked' : '';
     var oc     = locked ? '' : ' onclick="startBuild(\'' + k + '\')"';
-    // Zeige bei gesperrten Gebäuden das nötige Level
     var lvlNeeded = locked ? ' (Lvl ' + getLevel(bt.reqXP) + ')' : '';
     html += '<div class="build-card' + sel + lk + '"' + oc + '>';
     html += '<span class="build-icon">' + bt.emoji + '</span>';
@@ -172,7 +171,8 @@ function renderSidebarOrders() {
     html += '<div class="order-label">' + o.label + '</div>';
     html += '<div class="order-footer">';
     html += '<span class="order-reward">+' + o.xp + ' XP</span>';
-    html += '<button class="order-btn"' + (ok ? '' : ' disabled') + ' onclick="fulfillOrder(\'' + o.id + '\')">' +
+    html += '<button class="order-btn"' + (ok ? '' : ' disabled') +
+            ' onclick="fulfillOrder(\'' + o.id + '\')">' +
             (ok ? '✓ Liefern' : 'warten') + '</button>';
     html += '</div></div>';
   }
@@ -190,7 +190,6 @@ function canFulfillOrder(o) {
 function renderSidebarVillagers() {
   var html = '';
 
-  // Aktuelle Villager
   for (var i = 0; i < state.villagers.length; i++) {
     var v = state.villagers[i];
     var dots = '';
@@ -208,9 +207,8 @@ function renderSidebarVillagers() {
     html += '</div>';
   }
 
-  // Nächsten verfügbaren Villager anzeigen (Pool + Extra)
-  var nextIdx = state.villagers.length; // Index des nächsten Villagers
-
+  // Nächsten Villager (Pool oder generiert)
+  var nextIdx = state.villagers.length;
   var nextVP;
   if (nextIdx < VILLAGER_POOL.length) {
     nextVP = VILLAGER_POOL[nextIdx];
@@ -222,12 +220,10 @@ function renderSidebarVillagers() {
     };
   }
 
-  // Prüfen ob noch nicht eingestellt
   var alreadyHired = false;
   for (var j = 0; j < state.villagers.length; j++) {
     if (state.villagers[j].name === nextVP.name) { alreadyHired = true; break; }
   }
-
   if (!alreadyHired) {
     var can = state.xp >= nextVP.reqXP;
     html += '<button class="hire-btn"' + (can ? '' : ' disabled') + ' onclick="hireVillager(' + nextIdx + ')">';
@@ -239,16 +235,23 @@ function renderSidebarVillagers() {
   document.getElementById('sidebar-villagers').innerHTML = html;
 }
 
+// ============================================================
+// MITSPIELER – Level wird aus xp berechnet
+// xp wird von network.js in onlinePlayers[i].xp gesetzt
+// ============================================================
 function renderSidebarPlayers() {
   var el = document.getElementById('sidebar-players');
   if (!el) return;
   var html = '';
   for (var i = 0; i < onlinePlayers.length; i++) {
-    var p = onlinePlayers[i];
+    var p   = onlinePlayers[i];
+    // xp sicher auslesen – funktioniert auch wenn summary fehlt
+    var xp  = (p.xp !== undefined && p.xp !== null) ? Number(p.xp) : 0;
+    var lvl = getLevel(xp);
     html += '<div class="player-card">';
     html += '<div class="p-dot"></div>';
     html += '<span class="p-name">' + p.name + '</span>';
-    html += '<span class="p-xp">Lvl ' + getLevel(p.xp || 0) + '</span>';
+    html += '<span class="p-xp">Lvl ' + lvl + ' · ⭐' + xp + '</span>';
     html += '</div>';
   }
   if (onlinePlayers.length === 0)

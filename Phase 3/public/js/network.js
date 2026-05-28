@@ -4,17 +4,16 @@
 // ============================================================
 
 var ws = null;
-var onlinePlayers = [];
-var myPlayerId    = null;
-var myValleyId    = null;
-var reconnectTimer = null;
+var onlinePlayers    = [];
+var myPlayerId       = null;
+var myValleyId       = null;
+var reconnectTimer   = null;
 var connectionStatus = 'disconnected';
 
 // ============================================================
 // VERBINDUNG AUFBAUEN
 // ============================================================
 function connectToServer(playerName, valleyId) {
-  // WebSocket URL automatisch ermitteln
   var protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   var wsUrl    = protocol + '//' + window.location.host;
 
@@ -25,8 +24,6 @@ function connectToServer(playerName, valleyId) {
     setConnectionStatus('connected');
     clearTimeout(reconnectTimer);
     console.log('Verbunden mit Server');
-
-    // Valley beitreten
     wsSend({
       type:       'join',
       valleyId:   valleyId,
@@ -65,51 +62,97 @@ function handleServerMessage(msg) {
   switch (msg.type) {
 
     case 'joined':
-      myPlayerId = msg.playerId;
-      myValleyId = msg.valleyId;
-      // Valley-Aufträge übernehmen
+      myPlayerId  = msg.playerId;
+      myValleyId  = msg.valleyId;
       state.orders = msg.valleyOrders || [];
-      onlinePlayers = msg.players || [];
+
+      // XP aus Spielerliste sauber übernehmen (kein optional chaining)
+      onlinePlayers = (msg.players || []).map(function(p) {
+        return {
+          id:   p.id   || '',
+          name: p.name || 'Anonym',
+          xp:   typeof p.xp === 'number' ? p.xp : 0
+        };
+      });
+
       document.getElementById('valley-name-display').textContent = msg.valleyId;
-      document.getElementById('online-count').textContent = onlinePlayers.length;
+      document.getElementById('online-count').textContent        = onlinePlayers.length;
+
+      // Canvas nach dem Einblenden neu zentrieren
+      resizeCanvas();
+
       renderSidebarOrders();
       renderSidebarPlayers();
-      addChatMessage('System', 'Du bist Valley "'+msg.valleyId+'" beigetreten!', true);
+      updateResourceDisplay();
+      addChatMessage('System', 'Du bist Valley "' + msg.valleyId + '" beigetreten!', true);
       break;
 
     case 'player_joined':
-      onlinePlayers = msg.players || [];
+      onlinePlayers = (msg.players || []).map(function(p) {
+        return {
+          id:   p.id   || '',
+          name: p.name || 'Anonym',
+          xp:   typeof p.xp === 'number' ? p.xp : 0
+        };
+      });
       document.getElementById('online-count').textContent = onlinePlayers.length;
       renderSidebarPlayers();
-      addChatMessage('System', msg.playerName+' ist dem Valley beigetreten 👋', true);
-      showNotif('👋 '+msg.playerName+' ist dabei!');
+      addChatMessage('System', msg.playerName + ' ist dem Valley beigetreten 👋', true);
+      showNotif('👋 ' + msg.playerName + ' ist dabei!');
       break;
 
     case 'player_left':
-      onlinePlayers = msg.players || [];
+      onlinePlayers = (msg.players || []).map(function(p) {
+        return {
+          id:   p.id   || '',
+          name: p.name || 'Anonym',
+          xp:   typeof p.xp === 'number' ? p.xp : 0
+        };
+      });
       document.getElementById('online-count').textContent = onlinePlayers.length;
       renderSidebarPlayers();
-      addChatMessage('System', msg.playerName+' hat das Valley verlassen', true);
+      addChatMessage('System', msg.playerName + ' hat das Valley verlassen', true);
       break;
 
     case 'player_state':
-      // Anderen Spieler in der Liste updaten
+      // XP sauber auslesen – KEIN optional chaining (?.)
+      var incomingXP = 0;
+      if (msg.summary && typeof msg.summary.xp === 'number') {
+        incomingXP = msg.summary.xp;
+      } else if (msg.state && typeof msg.state.xp === 'number') {
+        // Fallback: manche Clients senden xp direkt in state
+        incomingXP = msg.state.xp;
+      }
+
+      var found = false;
       for (var i = 0; i < onlinePlayers.length; i++) {
         if (onlinePlayers[i].id === msg.playerId) {
-          onlinePlayers[i].xp = msg.summary?.xp || 0;
+          onlinePlayers[i].xp   = incomingXP;
+          onlinePlayers[i].name = msg.playerName || onlinePlayers[i].name;
+          found = true;
           break;
         }
       }
+
+      // Spieler noch nicht in der Liste → hinzufügen
+      if (!found && msg.playerId) {
+        onlinePlayers.push({
+          id:   msg.playerId,
+          name: msg.playerName || 'Anonym',
+          xp:   incomingXP
+        });
+      }
+
       renderSidebarPlayers();
       break;
 
     case 'orders_updated':
-      // Valley-Aufträge aktualisieren
       state.orders = msg.orders || [];
       if (msg.xpGained) {
         state.xp += msg.xpGained;
         document.getElementById('xp-val').textContent = state.xp;
         checkNewVillager();
+        updateLevelDisplay();
       }
       if (msg.message) {
         showNotif(msg.message);
@@ -120,7 +163,8 @@ function handleServerMessage(msg) {
 
     case 'chat':
       addChatMessage(msg.playerName, msg.text, false);
-      if (state.activeTab !== 'chat') showNotif('💬 '+msg.playerName+': '+msg.text.slice(0,30));
+      if (state.activeTab !== 'chat')
+        showNotif('💬 ' + msg.playerName + ': ' + msg.text.slice(0, 30));
       break;
 
     case 'error':
@@ -128,7 +172,6 @@ function handleServerMessage(msg) {
       break;
 
     case 'pong':
-      // Verbindung OK
       break;
   }
 }
@@ -142,7 +185,6 @@ function wsSend(msg) {
   }
 }
 
-// Eigenen Zustand senden (alle X Sekunden)
 function sendStateUpdate() {
   wsSend({
     type:    'state_update',
@@ -157,73 +199,69 @@ function networkFulfillOrder(orderId) {
 
 function networkSendChat(text) {
   wsSend({ type: 'chat', text: text });
-  // Eigene Nachricht direkt anzeigen
-  addChatMessage(state.playerName+' (du)', text, false);
+  addChatMessage(state.playerName + ' (du)', text, false);
 }
 
 function getStateSummary() {
   return {
-    playerName:   state.playerName,
-    xp:           state.xp,
-    villagerCount:state.villagers.length,
-    buildingCount:state.buildings.length
+    playerName:    state.playerName,
+    xp:            state.xp,
+    villagerCount: state.villagers.length,
+    buildingCount: state.buildings.length
   };
 }
 
 // ============================================================
-// VERBINDUNGSSTATUS ANZEIGEN
+// VERBINDUNGSSTATUS
 // ============================================================
 function setConnectionStatus(status) {
   connectionStatus = status;
   var el = document.getElementById('connection-status');
   if (!el) return;
-  el.className = status;
-  el.textContent = status === 'connected' ? '🟢 Online' : status === 'connecting' ? '🟡 Verbinde...' : '🔴 Offline';
+  el.className   = status;
+  el.textContent = status === 'connected'    ? '🟢 Online'      :
+                   status === 'connecting'   ? '🟡 Verbinde...' : '🔴 Offline';
 }
 
-// Regelmässig Ping senden um Verbindung aufrecht zu halten
+// Ping alle 30s
 setInterval(function() {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    wsSend({ type: 'ping' });
-  }
+  if (ws && ws.readyState === WebSocket.OPEN) wsSend({ type: 'ping' });
 }, 30000);
 
 // ============================================================
-// JOIN SCREEN LOGIK
+// JOIN SCREEN
 // ============================================================
 function joinValley() {
-  var nameInput   = document.getElementById('player-name-input');
+  var nameInput  = document.getElementById('player-name-input');
   var valleyInput = document.getElementById('valley-input');
-  var errorEl     = document.getElementById('join-error');
+  var errorEl    = document.getElementById('join-error');
 
   var playerName = nameInput.value.trim();
-  var valleyId   = valleyInput.value.trim().toLowerCase().replace(/\s+/g,'-') || 'default';
+  var valleyId   = valleyInput.value.trim().toLowerCase().replace(/\s+/g, '-') || 'default';
 
   if (!playerName) {
-    errorEl.textContent = 'Bitte gib deinen Namen ein!';
-    return;
+    errorEl.textContent = 'Bitte gib deinen Namen ein!'; return;
   }
   if (playerName.length < 2) {
-    errorEl.textContent = 'Name muss mindestens 2 Zeichen haben';
-    return;
+    errorEl.textContent = 'Name muss mindestens 2 Zeichen haben'; return;
   }
 
-  // State initialisieren
   state.playerName = playerName;
-  myValleyId = valleyId;
+  myValleyId       = valleyId;
 
-  // Gespeicherten Spielstand laden
   loadGame(playerName);
 
-  // Join-Screen ausblenden, Spiel einblenden
-  document.getElementById('join-screen').style.display = 'none';
-  document.getElementById('game-container').style.display = 'flex';
+  // Join-Screen ausblenden
+  document.getElementById('join-screen').style.display        = 'none';
+  document.getElementById('game-container').style.display     = 'flex';
   document.getElementById('game-container').style.flexDirection = 'column';
 
-  // Zum Server verbinden
+  // Canvas JETZT neu berechnen – container ist ab hier sichtbar
+  // (vorher war clientWidth/Height = 0 wegen display:none)
+  setTimeout(function() { resizeCanvas(); }, 50);
+
   connectToServer(playerName, valleyId);
 
-  // URL updaten (optional, fürs Teilen)
   if (window.history && window.history.replaceState) {
     window.history.replaceState({}, '', '?valley=' + valleyId);
   }
@@ -231,8 +269,8 @@ function joinValley() {
 
 // Valley-Name aus URL vorausfüllen
 (function() {
-  var params   = new URLSearchParams(window.location.search);
-  var valley   = params.get('valley');
+  var params = new URLSearchParams(window.location.search);
+  var valley = params.get('valley');
   if (valley) {
     var el = document.getElementById('valley-input');
     if (el) el.value = valley;

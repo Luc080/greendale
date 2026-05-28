@@ -3,7 +3,7 @@
 // Abhängig von: data.js
 // ============================================================
 
-var SAVE_KEY_PREFIX = 'greendale_v6_'; // v6 = neue Version, sauberer Neustart
+var SAVE_KEY_PREFIX = 'greendale_v6_';
 
 var state = {
   playerName:       'Spieler',
@@ -16,7 +16,7 @@ var state = {
   buildMode:        null,
   activeTab:        'villagers',
   hoverTile:        null,
-  orders:           [],   // Valley-Aufträge (vom Server)
+  orders:           [],
   nextVillagerId:   3,
   prevXP:           0,
   villagers: [
@@ -35,7 +35,41 @@ var state = {
 };
 
 // ============================================================
-// SAVE / LOAD (localStorage) – sauber und robust
+// KOLLISIONS-HILFSFUNKTIONEN
+// Prüft ob ein Tile begehbar ist (kein Wasser, kein Gebäude)
+// TMAP kommt aus draw.js (wird nach generateMap() befüllt)
+// ============================================================
+function isTileWalkable(col, row) {
+  // Kartengrenzen
+  if (col < 0 || row < 0 || col >= COLS || row >= ROWS) return false;
+
+  // Wasser-Tiles (Typ 3) sind nicht begehbar
+  if (TMAP && TMAP[Math.round(row)] && TMAP[Math.round(row)][Math.round(col)] === 3) return false;
+
+  // Gebäude-Tiles sind nicht begehbar
+  var rc = Math.round(col), rr = Math.round(row);
+  for (var i = 0; i < state.buildings.length; i++) {
+    if (state.buildings[i].col === rc && state.buildings[i].row === rr) return false;
+  }
+
+  return true;
+}
+
+// Gibt ein zufälliges begehbares Wanderziel zurück
+function randomWalkTarget() {
+  var tries = 0;
+  while (tries < 20) {
+    var tc = 2 + Math.random() * (COLS - 4);
+    var tr = 2 + Math.random() * (ROWS - 4);
+    if (isTileWalkable(Math.round(tc), Math.round(tr))) return { x: tc, y: tr };
+    tries++;
+  }
+  // Fallback: Mitte der Karte
+  return { x: COLS / 2, y: ROWS / 2 };
+}
+
+// ============================================================
+// SAVE / LOAD
 // ============================================================
 function saveGame() {
   try {
@@ -48,28 +82,17 @@ function saveGame() {
       tick:           state.tick,
       nextVillagerId: state.nextVillagerId,
       prevXP:         state.prevXP,
-      // Villager: nur persistente Felder speichern (kein vx/vy/anim)
       villagers: state.villagers.map(function(v) {
         return {
-          id:         v.id,
-          name:       v.name,
-          emoji:      v.emoji,
-          skin:       v.skin,
-          hair:       v.hair,
-          shirt:      v.shirt,
-          pants:      v.pants,
-          task:       v.task,
-          hunger:     v.hunger,
-          buildingId: v.buildingId,
-          progress:   v.progress,
-          // Position merken damit Villager nach Reload nicht teleportieren
-          x: v.x, y: v.y, tx: v.tx, ty: v.ty
+          id: v.id, name: v.name, emoji: v.emoji,
+          skin: v.skin, hair: v.hair, shirt: v.shirt, pants: v.pants,
+          task: v.task, hunger: v.hunger, buildingId: v.buildingId,
+          progress: v.progress, x: v.x, y: v.y, tx: v.tx, ty: v.ty
         };
       }),
       buildings: state.buildings
     };
-    var key = SAVE_KEY_PREFIX + state.playerName;
-    localStorage.setItem(key, JSON.stringify(toSave));
+    localStorage.setItem(SAVE_KEY_PREFIX + state.playerName, JSON.stringify(toSave));
     showNotif('💾 Gespeichert!');
     return true;
   } catch(e) {
@@ -80,32 +103,24 @@ function saveGame() {
 
 function loadGame(playerName) {
   try {
-    var key = SAVE_KEY_PREFIX + playerName;
-    var raw = localStorage.getItem(key);
+    var raw = localStorage.getItem(SAVE_KEY_PREFIX + playerName);
     if (!raw) return false;
-
     var d = JSON.parse(raw);
+    if (!d || !Array.isArray(d.villagers) || !Array.isArray(d.buildings)) return false;
 
-    // Pflichtfelder prüfen – korrupte Saves abfangen
-    if (!d || typeof d !== 'object') return false;
-    if (!Array.isArray(d.villagers) || !Array.isArray(d.buildings)) return false;
+    state.playerName     = d.playerName     || playerName;
+    state.xp             = typeof d.xp  === 'number' ? d.xp  : 0;
+    state.day            = typeof d.day === 'number'  ? d.day : 1;
+    state.tick           = typeof d.tick === 'number' ? d.tick: 0;
+    state.nextVillagerId = typeof d.nextVillagerId === 'number' ? d.nextVillagerId : d.villagers.length;
+    state.prevXP         = typeof d.prevXP === 'number' ? d.prevXP : state.xp;
 
-    state.playerName      = d.playerName      || playerName;
-    state.xp              = typeof d.xp === 'number'  ? d.xp  : 0;
-    state.day             = typeof d.day === 'number'  ? d.day : 1;
-    state.tick            = typeof d.tick === 'number' ? d.tick: 0;
-    state.nextVillagerId  = typeof d.nextVillagerId === 'number' ? d.nextVillagerId : d.villagers.length;
-    state.prevXP          = typeof d.prevXP === 'number' ? d.prevXP : state.xp;
-
-    // Ressourcen: bekannte Keys übernehmen, unbekannte ignorieren
-    var defaultRes = { wood: 0, stone: 0, wheat: 0, soup: 0, furniture: 0, brick: 0, bread: 0, water: 0 };
+    var defaultRes = { wood:0, stone:0, wheat:0, soup:0, furniture:0, brick:0, bread:0, water:0 };
     if (d.resources && typeof d.resources === 'object') {
-      for (var k in defaultRes) {
+      for (var k in defaultRes)
         state.resources[k] = typeof d.resources[k] === 'number' ? d.resources[k] : 0;
-      }
     }
 
-    // Villager: fehlende Felder mit Defaults auffüllen (robuster gegen alte Saves)
     state.villagers = d.villagers.map(function(v) {
       return {
         id:         typeof v.id === 'number' ? v.id : 0,
@@ -119,15 +134,14 @@ function loadGame(playerName) {
         hunger:     typeof v.hunger === 'number' ? v.hunger : MAX_HUNGER,
         buildingId: v.buildingId !== undefined ? v.buildingId : null,
         progress:   typeof v.progress === 'number' ? v.progress : 0,
-        x:          typeof v.x  === 'number' ? v.x  : 5,
-        y:          typeof v.y  === 'number' ? v.y  : 5,
-        tx:         typeof v.tx === 'number' ? v.tx : 5,
-        ty:         typeof v.ty === 'number' ? v.ty : 5,
-        vx: 0, vy: 0, anim: 0   // Runtime-Felder immer zurücksetzen
+        x:  typeof v.x  === 'number' ? v.x  : 5,
+        y:  typeof v.y  === 'number' ? v.y  : 5,
+        tx: typeof v.tx === 'number' ? v.tx : 5,
+        ty: typeof v.ty === 'number' ? v.ty : 5,
+        vx: 0, vy: 0, anim: 0
       };
     });
 
-    // Gebäude: fehlende Felder auffüllen
     state.buildings = d.buildings.map(function(b) {
       return {
         id:   typeof b.id  === 'number' ? b.id  : 0,
@@ -139,7 +153,6 @@ function loadGame(playerName) {
 
     showNotif('✅ ' + playerName + ' geladen – Tag ' + state.day);
     return true;
-
   } catch(e) {
     console.warn('loadGame Fehler:', e);
     return false;
@@ -151,9 +164,7 @@ var autoSaveTimer = null;
 function startAutoSave() {
   clearInterval(autoSaveTimer);
   autoSaveTimer = setInterval(function() {
-    if (state.playerName && state.playerName !== 'Spieler') {
-      saveGame();
-    }
+    if (state.playerName && state.playerName !== 'Spieler') saveGame();
   }, 60000);
 }
 
@@ -163,11 +174,10 @@ function startAutoSave() {
 function tickProduction() {
   state.tick++;
 
-  // Fortschrittsbalken kontinuierlich updaten
   for (var i = 0; i < state.villagers.length; i++) {
     var v = state.villagers[i];
     if (v.buildingId !== null) {
-      var spd = v.hunger >= 4 ? 1.0 : v.hunger >= 3 ? 0.85 : v.hunger >= 2 ? 0.6 : v.hunger >= 1 ? 0.35 : 0.1;
+      var spd = v.hunger>=4?1.0:v.hunger>=3?0.85:v.hunger>=2?0.6:v.hunger>=1?0.35:0.1;
       v.progress = Math.min(100, v.progress + (100 / PRODUCE_INTERVAL) * spd);
     }
   }
@@ -175,48 +185,36 @@ function tickProduction() {
   if (state.tick % PRODUCE_INTERVAL === 0) {
     var cc = Math.floor(state.tick / PRODUCE_INTERVAL);
 
-    // Ressourcen produzieren
     for (var i = 0; i < state.villagers.length; i++) {
       var v = state.villagers[i];
       if (v.buildingId === null) continue;
-
       var bld = null;
       for (var j = 0; j < state.buildings.length; j++) {
         if (state.buildings[j].id === v.buildingId) { bld = state.buildings[j]; break; }
       }
-      if (!bld) { v.buildingId = null; continue; } // Gebäude weg → Villager befreien
-
+      if (!bld) { v.buildingId = null; continue; }
       var ch = CHAINS[bld.type];
       if (!ch || !ch.output) continue;
-
-      if (ch.input && state.resources[ch.input] < ch.inputAmt) {
-        v.progress = 0;
-        continue;
-      }
+      if (ch.input && state.resources[ch.input] < ch.inputAmt) { v.progress = 0; continue; }
       if (ch.input) state.resources[ch.input] = Math.max(0, state.resources[ch.input] - ch.inputAmt);
       state.resources[ch.output] = Math.min(999, (state.resources[ch.output] || 0) + ch.outputAmt);
       v.progress = 0;
     }
 
-    // Hunger (alle HUNGER_INTERVAL Produktionszyklen)
     if (cc % HUNGER_INTERVAL === 0) {
       for (var i = 0; i < state.villagers.length; i++) {
         var v = state.villagers[i];
         if (v.hunger > 0) v.hunger--;
-        // Suppe oder Brot als Nahrung
         if (v.hunger <= 1) {
           if (state.resources.soup > 0) {
-            state.resources.soup--;
-            v.hunger = MAX_HUNGER;
+            state.resources.soup--; v.hunger = MAX_HUNGER;
           } else if (state.resources.bread > 0) {
-            state.resources.bread--;
-            v.hunger = MAX_HUNGER - 1;
+            state.resources.bread--; v.hunger = MAX_HUNGER - 1;
           }
         }
       }
     }
 
-    // Tag zählen
     if (state.tick % (PRODUCE_INTERVAL * 8) === 0) {
       state.day++;
       document.getElementById('time-chip').textContent = '⏱ Tag ' + state.day;
@@ -231,12 +229,9 @@ function tickProduction() {
 }
 
 // ============================================================
-// VILLAGER – unbegrenzt, dynamische Generierung
+// VILLAGER
 // ============================================================
 function checkNewVillager() {
-  var totalCount = state.villagers.length + 1; // wie viele schon da sind + nächster
-
-  // Pool-Villager prüfen
   for (var i = 0; i < VILLAGER_POOL.length; i++) {
     var vp = VILLAGER_POOL[i];
     if (vp.reqXP > 0 && state.prevXP < vp.reqXP && state.xp >= vp.reqXP) {
@@ -247,18 +242,14 @@ function checkNewVillager() {
       if (!hired) showVillagerPopup(vp.emoji, vp.name);
     }
   }
-
-  // Extra-Villager jenseits des Pools
   if (state.villagers.length >= VILLAGER_POOL.length) {
-    var idx      = state.villagers.length; // Index des nächsten
+    var idx       = state.villagers.length;
     var threshold = getExtraVillagerXP(idx);
     if (state.prevXP < threshold && state.xp >= threshold) {
       var extra = generateExtraVillager(idx);
       showVillagerPopup(extra.emoji, extra.name);
     }
   }
-
-  // Level-Anzeige aktualisieren
   updateLevelDisplay();
   state.prevXP = state.xp;
 }
@@ -274,7 +265,6 @@ function closeHirePopup() {
   document.getElementById('hire-popup').style.display = 'none';
 }
 
-// Generiert einen zufälligen Villager jenseits des festen Pools
 function generateExtraVillager(idx) {
   var ni = idx % VILLAGER_NAMES_EXTRA.length;
   var ei = idx % VILLAGER_EMOJIS.length;
@@ -294,34 +284,19 @@ function generateExtraVillager(idx) {
 }
 
 function hireVillager(idx) {
-  var vp;
-  if (idx < VILLAGER_POOL.length) {
-    vp = VILLAGER_POOL[idx];
-  } else {
-    vp = generateExtraVillager(idx);
-  }
+  var vp = idx < VILLAGER_POOL.length ? VILLAGER_POOL[idx] : generateExtraVillager(idx);
   if (state.xp < vp.reqXP) { showNotif('Zu wenig XP!'); return; }
-
-  // Prüfen ob schon eingestellt (anhand Name)
   for (var i = 0; i < state.villagers.length; i++) {
     if (state.villagers[i].name === vp.name) { showNotif(vp.name + ' ist schon da!'); return; }
   }
-
+  // Startposition: zufälliges begehbares Tile in Kartenmitte
+  var start = randomWalkTarget();
   state.villagers.push({
-    id:         state.nextVillagerId++,
-    name:       vp.name,
-    emoji:      vp.emoji,
-    skin:       vp.skin,
-    hair:       vp.hair,
-    shirt:      vp.shirt,
-    pants:      vp.pants,
-    task:       'Idle',
-    hunger:     MAX_HUNGER,
-    x: 5, y: 5, tx: 5, ty: 5,
-    vx: 0, vy: 0,
-    buildingId: null,
-    progress:   0,
-    anim:       0
+    id: state.nextVillagerId++, name: vp.name, emoji: vp.emoji,
+    skin: vp.skin, hair: vp.hair, shirt: vp.shirt, pants: vp.pants,
+    task: 'Idle', hunger: MAX_HUNGER,
+    x: start.x, y: start.y, tx: start.x, ty: start.y,
+    vx: 0, vy: 0, buildingId: null, progress: 0, anim: 0
   });
   showNotif(vp.name + ' ist beigetreten! 🎉');
   renderSidebar();
@@ -332,33 +307,28 @@ function hireVillager(idx) {
 // LEVEL-ANZEIGE
 // ============================================================
 function updateLevelDisplay() {
-  var lvl     = getLevel(state.xp);
-  var nextXP  = getXPForNextLevel(state.xp);
-  var prevXP  = LEVEL_THRESHOLDS[lvl - 1] || 0;
-
-  // Level-Chip
-  var lvlEl = document.getElementById('level-chip');
+  var lvl    = getLevel(state.xp);
+  var nextXP = getXPForNextLevel(state.xp);
+  var prevXP = LEVEL_THRESHOLDS[lvl - 1] || 0;
+  var lvlEl  = document.getElementById('level-chip');
   if (lvlEl) lvlEl.textContent = '🏅 Lvl ' + lvl;
-
-  // Fortschrittsbalken
   var fillEl = document.getElementById('level-bar-fill');
   if (fillEl) {
-    var pct = nextXP
-      ? Math.round(((state.xp - prevXP) / (nextXP - prevXP)) * 100)
-      : 100;
+    var pct = nextXP ? Math.round(((state.xp - prevXP) / (nextXP - prevXP)) * 100) : 100;
     fillEl.style.width = pct + '%';
   }
 }
 
 // ============================================================
-// BEWEGUNG (Physik-basiert)
+// BEWEGUNG MIT KOLLISION
 // ============================================================
 function moveVillagers() {
   for (var i = 0; i < state.villagers.length; i++) {
     var v = state.villagers[i];
 
-    // Ziel setzen
+    // ── Ziel setzen ───────────────────────────────────────────
     if (v.buildingId !== null) {
+      // Ziel = Gebäude-Tile
       for (var j = 0; j < state.buildings.length; j++) {
         if (state.buildings[j].id === v.buildingId) {
           v.tx = state.buildings[j].col;
@@ -367,36 +337,74 @@ function moveVillagers() {
         }
       }
     } else {
+      // Wandern: neues Ziel wenn angekommen
       var dx = v.x - v.tx, dy = v.y - v.ty;
       if (Math.sqrt(dx*dx + dy*dy) < ARRIVE_DIST) {
-        // Wandern über grössere Karte (COLS/ROWS aus data.js)
-        v.tx = 2 + Math.random() * (COLS - 4);
-        v.ty = 2 + Math.random() * (ROWS - 4);
+        var t = randomWalkTarget();
+        v.tx  = t.x;
+        v.ty  = t.y;
       }
     }
 
-    // Beschleunigung
+    // ── Beschleunigung ────────────────────────────────────────
     var ex = v.tx - v.x, ey = v.ty - v.y;
     var d  = Math.sqrt(ex*ex + ey*ey);
-    var speed = v.buildingId !== null ? ACCEL * 1.4 : ACCEL;
+    var speed = v.buildingId !== null ? ACCEL * 1.2 : ACCEL;
     var slowF = Math.min(1, d * 2);
+
     if (d > ARRIVE_DIST) {
       v.vx += (ex / d) * speed * slowF;
       v.vy += (ey / d) * speed * slowF;
     }
 
-    // Reibung + Max-Speed
+    // ── Reibung + Max-Speed ───────────────────────────────────
     v.vx *= FRICTION;
     v.vy *= FRICTION;
     var vm = Math.sqrt(v.vx*v.vx + v.vy*v.vy);
-    if (vm > 0.04) { v.vx = (v.vx/vm)*0.04; v.vy = (v.vy/vm)*0.04; }
+    var maxSpd = 0.035; // langsamer als vorher (war 0.06)
+    if (vm > maxSpd) { v.vx = (v.vx/vm)*maxSpd; v.vy = (v.vy/vm)*maxSpd; }
 
-    v.x += v.vx;
-    v.y += v.vy;
+    // ── Kollision: neue Position berechnen ────────────────────
+    var nx = v.x + v.vx;
+    var ny = v.y + v.vy;
 
-    // Karte nicht verlassen
-    v.x = Math.max(0, Math.min(COLS - 1, v.x));
-    v.y = Math.max(0, Math.min(ROWS - 1, v.y));
+    var ncol = Math.round(nx);
+    var nrow = Math.round(ny);
+
+    // Vollständige neue Position begehbar?
+    if (isTileWalkable(ncol, nrow)) {
+      v.x = nx;
+      v.y = ny;
+    } else {
+      // X-Achse einzeln prüfen (Gleiten entlang Hindernissen)
+      var nxOnly = Math.round(nx);
+      var nyOnly = Math.round(v.y);
+
+      if (isTileWalkable(nxOnly, nyOnly)) {
+        // Nur X bewegen, Y stoppen
+        v.x  = nx;
+        v.vy = 0;
+      } else {
+        // Nur Y prüfen
+        var nxOnly2 = Math.round(v.x);
+        var nyOnly2 = Math.round(ny);
+        if (isTileWalkable(nxOnly2, nyOnly2)) {
+          v.y  = ny;
+          v.vx = 0;
+        } else {
+          // Komplett blockiert → Geschwindigkeit nullen, neues Ziel
+          v.vx = 0;
+          v.vy = 0;
+          var t2 = randomWalkTarget();
+          v.tx = t2.x;
+          v.ty = t2.y;
+        }
+      }
+    }
+
+    // ── Karte nicht verlassen ─────────────────────────────────
+    v.x = Math.max(0.5, Math.min(COLS - 1.5, v.x));
+    v.y = Math.max(0.5, Math.min(ROWS - 1.5, v.y));
   }
 }
 
@@ -424,6 +432,10 @@ function placeBuilding(col, row) {
   if (col < 0 || row < 0 || col >= COLS || row >= ROWS) {
     showNotif('Ausserhalb der Karte!'); return;
   }
+  // Nicht auf Wasser bauen
+  if (TMAP && TMAP[row] && TMAP[row][col] === 3) {
+    showNotif('Nicht auf Wasser bauen!'); return;
+  }
 
   state.resources.wood  -= bt.costWood;
   state.resources.stone -= bt.costStone;
@@ -431,14 +443,24 @@ function placeBuilding(col, row) {
   for (var i = 0; i < state.buildings.length; i++) if (state.buildings[i].id > mx) mx = state.buildings[i].id;
   state.buildings.push({ id: mx + 1, type: type, col: col, row: row });
   state.buildMode = null; state.hoverTile = null;
+
+  // Villager die auf diesem Tile stehen wegschicken
+  for (var i = 0; i < state.villagers.length; i++) {
+    var v = state.villagers[i];
+    if (Math.round(v.x) === col && Math.round(v.y) === row) {
+      var t3 = randomWalkTarget();
+      v.tx = t3.x; v.ty = t3.y;
+    }
+  }
+
   updateResourceDisplay();
   renderActiveTab();
   showNotif(bt.name + ' gebaut! ✅');
-  saveGame(); // nach jedem Bau sofort speichern
+  saveGame();
 }
 
 // ============================================================
-// AUFTRAG ERFÜLLEN (via Server)
+// AUFTRAG ERFÜLLEN
 // ============================================================
 function fulfillOrder(orderId) {
   var order = null;
@@ -446,17 +468,14 @@ function fulfillOrder(orderId) {
     if (state.orders[i].id === orderId) { order = state.orders[i]; break; }
   }
   if (!order) return;
-
   for (var res in order.items) {
     if ((state.resources[res] || 0) < order.items[res]) {
       showNotif('Nicht genug ' + res + '!'); return;
     }
   }
-
   for (var res in order.items) {
     state.resources[res] = Math.max(0, state.resources[res] - order.items[res]);
   }
-
   networkFulfillOrder(orderId);
   updateResourceDisplay();
 }
