@@ -1,7 +1,30 @@
-beim herinzoomen sollte das feld sich nicht auseinanderziehen lassen. also das spielbreet wird durchsichtig zum teil
-tageszyklus ist zu schnell. sagen wir alle 4-5min kannst du von morgen zu mittag wechseln und die lichtverhältnisse sind noch zu krass
-terrain sollte für jede person gleich sein. alle das gleiche spiel am spielen
-die häuser sind bedeutend besser aber eine wand fehlt noch. dach und west wand ist da. aber die süd wand fehtl noch
+Hallo Claude! Wir gehen jetzt über zu Version v6.5. 
 
-zudem wollte ich dcoh eine 3d grafik wie in everdale. also sprich für mobile version auch spielbar. eher so:
-Ich möchte Grafiken/Assets in einem ganz bestimmten Stil erstellen. Er ist exakt angelehnt an das Mobilspiel Everdale von Supercell. Bitte nutze für alle weiteren Generierungen und Beschreibungen folgende visuelle Design-Richtlinien:Stil-Bezeichnung: Stylized 3D Casual Art, Cozy Fantasy Storybook Look.Formen (Geometry): Chunky, abgerundete und extrem vereinfachte Formen. Keine harten Kanten. Alles wirkt weich, knubbelig und leicht spielzeugartig (Toy-like).Perspektive: Isometrische Ansicht (Vogelperspektive / Orthografisch).Textur & Shading: Hand-painted Look mit weichen Farbverläufen (Gradients). Keine fotorealistischen Texturen. Matte Oberflächen mit sanften, gezielten Lichtreflexen (Specular Highlights).Farben: Hochgesättigte, warme und lebendige Farben. Dominierende Naturtöne (saftiges Grün, weiche Erdtöne).
+WICHTIGE STRUKTUR-ANWEISUNG VORAB: 
+Wenn du mir ZIP-Files oder Code-Pakete herausgibst, lege alle Dateien direkt in das Hauptverzeichnis (Root). Erstelle KEINE verschachtelten Unterordner (keine 3 Ebenen tiefen Strukturen). Alle Dateien flach in den Hauptordner.
+
+Wir führen jetzt ein großes Upgrade durch. Bitte verarbeite die folgenden Änderungen sorgfältig und schrittweise, ohne Code-Teile zu kürzen oder wegzulassen.
+
+### PHASE 1: Visuelle Neuausrichtung (Wechsel auf echtes 3D)
+Wir müssen das visuelle System von der aktuellen 2D-Pixel-Grafik komplett auf echtes, performantes Web-3D (z.B. Three.js / WebGL) umstellen, damit das Spiel auf dem Smartphone absolut flüssig läuft. Nutze ab jetzt für alle 3D-Assets und das Rendering folgende visuelle Design-Richtlinien:
+- Stil-Bezeichnung: Stylized 3D Casual Art, Cozy Fantasy Storybook Look (analog zum Spiel "Everdale" von Supercell).
+- Formen (Geometry): Chunky, abgerundete und extrem vereinfachte Formen. Keine harten Kanten. Alles wirkt weich, knubbelig und leicht spielzeugartig (Toy-like).
+- Perspektive: Isometrische Ansicht (Vogelperspektive / Orthografisch).
+- Textur & Shading: Hand-painted Look mit weichen Farbverläufen (Gradients). Keine fotorealistischen Texturen. Matte Oberflächen mit sanften, gezielten Lichtreflexen (Specular Highlights).
+- Farben: Hochgesättigte, warme und lebendige Farben. Dominierende Naturtöne (saftiges Grün, weiche Erdtöne).
+
+### PHASE 2: Gameplay- & Bugfixes (Änderungen aus Phase 10)
+Bitte baue parallel folgende Anpassungen und Korrekturen direkt in die Logik ein:
+
+1. Zoom-Verhalten: Beim Herinzoomen darf sich das Feld nicht auseinanderziehen lassen (das Spielbrett wurde bisher zum Teil durchsichtig). Das muss blockiert/gefixt werden.
+2. Tageszyklus & Licht: Der Zyklus ist zu schnell. Ändere es so, dass man alle 4-5 Minuten von Morgen zu Mittag wechseln kann. Die Lichtverhältnisse/Kontraste sind aktuell noch viel zu krass – bitte sanfter gestalten.
+3. Globales Terrain: Das Terrain muss für jede Person absolut gleich sein. Alle spielen exakt dasselbe Spiel auf derselben Karte.
+4. Haus-Modelle: Die Häuser sind bedeutend besser, aber es fehlt noch eine Wand im 3D-Raum. Dach und West-Wand sind da. Die Süd-Wand fehlt noch – bitte hinzufügen.
+5. Personen & Animationen: 
+   - Die Haare der Charaktere müssen optisch angepasst werden.
+   - Die Bewegungen und Partikeleffekte sind viel zu viel und viel zu schnell. Bitte deutlich herunterschrauben und verlangsamen.
+6. Produktions-Anzeige: Entferne die Prozentanzahl komplett. Baue stattdessen bei jedem Haus einen visuellen Timer ein, der anzeigt, wie lange man noch für die Produktion braucht. Passe auch die Werkzeuge visuell entsprechend an.
+7. Produktionszeiten: Bitte passe die Produktionszeiten der verschiedenen Items an, sodass sie realistisch und ungleich lang sind (nicht alles soll gleich lang dauern).
+8. UI-Bereinigung: Das Menü "Ketten" kann komplett entfernt werden (dafür kommt später ein Tutorial).
+
+Bitte bestätige mir kurz, ob du die Umstellung auf das neue 3D-System und die Feature-Liste verstanden hast, und gib mir dann den aktualisierten Code/die v6.5 ZIP-Struktur aus.
