@@ -1,0 +1,16 @@
+{
+  "name": "greendale",
+  "version": "4.0.0",
+  "description": "Greendale – Phase 4: Persistenz, Casino, Events, Handel",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.16.0",
+    "uuid": "^9.0.0",
+    "@supabase/supabase-js": "^2.39.0"
+  }
+}
