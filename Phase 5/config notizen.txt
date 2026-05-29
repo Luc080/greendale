@@ -1,9 +1,10 @@
 waS0l0x6uZR0dTUc
 
 
-API URL: https://kwtbtxebobjysxyxtsmg.supabase.co/rest/v1/
+API URL: https://kwtbtxebobjysxyxtsmg.supabase.co
 
-anon public: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt3dGJ0eGVib2JqeXN4eXh0c21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwMDY5NDAsImV4cCI6MjA5NTU4Mjk0MH0.Ho7fK1ne40scOCsyc9vhSv5y85wDVsfNXkLsaCYDaEs
+service_role:
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt3dGJ0eGVib2JqeXN4eXh0c21nIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDAwNjk0MCwiZXhwIjoyMDk1NTgyOTQwfQ.Vcgc3FJz51V0QnJ2nG5CF-JRujn4y9OxHGC9jwaklQU
 
 
 $env:SUPABASE_URL="https://deine-url.supabase.co"; $env:SUPABASE_KEY="deinKey"; node server.js
