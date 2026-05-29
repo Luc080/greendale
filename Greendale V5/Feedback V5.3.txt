@@ -1,0 +1,9 @@
+zoomen von spielfeld muss möglich sein
+hintergrund hat sich immernoch nicht verändert
+die figuren sollten sich immer bewegen wenn sie nicht arbeiten und dürfen auf keinem fall an häuser etc. hängen bleiben
+hintergrund ist gut fürs erste
+beim blackjack sieht man das ergebnis des dealers leider nie
+beim upgraden wäre in zukunft auch noch gut wenn man einen visuellen unterschied hat
+während eines entsprechenden events sollten auch mehr aufträge von z.b. holz oder so kommen
+das festival kann man ebenfalls nicht abschliessen und falls nicht eh schon vorhanden eine belohnung einbauen
+ansonsten ist das spiel in meiner welt fast fertig. natürlich der zusätzlcihe tiefgang fehlt noch aber das kommt nach der guten 3d grafik :)
