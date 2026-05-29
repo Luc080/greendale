@@ -1,0 +1,13 @@
+Gebäude upgraden (Level 2 produziert schneller)
+Tages-/Nacht-Zyklus auf dem Canvas
+Sound-Effekte
+Animierte Levelup-Sequenz
+Valley-Rangliste / Leaderboard
+bewegungen der menschen verlangsamen oder reduzieren
+die häuser sollten sich von beginnn an nicht überlappen. das ist auch wichtig
+hintergrund sollte auch nicht nur ein grüner und blauer balken sein
+der timer von festival sollte flüssig herunterzählen bitte
+zudem sollten die aufträge auch nur das beinhalten was man an fabriken schon gebaut hat/kann
+und sprache soll einheitlich deutsch sein. wenn sowohl sounds als auch sprache kommt wäre ein settings button gut wo man auch zu komplett englisch umstellen könnte gut
+chat funktioniert ebenfalls nur sehe ich meine nachrichten doppelt was unpassend ist
+

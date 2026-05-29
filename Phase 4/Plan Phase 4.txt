@@ -1,0 +1,26 @@
+🎰 Phase 4 – Tiefe & Langzeitmotivation
+Priorität 1 – Persistenz (Fundament)
+
+Supabase-Datenbank statt localStorage – Spielstand bleibt auch bei anderem Browser/Gerät
+Valley-Aufträge und Fortschritt bleiben beim Server-Neustart erhalten
+
+Priorität 2 – Casino-Feature (bereits geplant)
+
+Neue Währung Coins (durch Aufträge verdienen)
+Slot Machine – kleiner Einsatz, Ressourcen als Gewinn
+Blackjack-Tisch – gegen den Dealer
+Freischaltbar ab Level 5
+
+Priorität 3 – Mehr Spieltiefe
+
+Valley-Events – z.B. "Ernte-Festival: liefert 20x Weizen in 10 Minuten" für alle gemeinsam
+Handelssystem – Ressourcen zwischen Spielern im Valley tauschen
+Gebäude upgraden – Level 2 produziert schneller/mehr
+Mehr Produktionsketten – z.B. Schmiede (Stein + Holz → Werkzeug)
+
+Priorität 4 – Polish
+
+Electron-Build (.exe für Windows/Mac)
+Sound-Effekte – Produktion, Bau, Levelup
+Animierte Levelup-Sequenz
+Tages-/Nacht-Zyklus auf dem Canvas
