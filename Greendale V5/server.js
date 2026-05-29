@@ -14,9 +14,10 @@ const server = http.createServer(app);
 const wss    = new WebSocket.Server({ server });
 const PORT   = process.env.PORT || 3000;
 
-app.use(express.static(path.join(__dirname, 'public')));
+// Zeile 17 ersetzen:
+app.use(express.static(path.join(__dirname)));
 app.get('*', (req, res) =>
-  res.sendFile(path.join(__dirname, 'public', 'index.html'))
+  res.sendFile(path.join(__dirname, 'index.html'))
 );
 
 // ============================================================
