@@ -11,3 +11,9 @@ Was zuletzt gemacht wurde: Produktionsketten, neue Fabriken
 Was als nächstes geplant ist: Phase 3
 Meine Rolle: Ich (der User) will verstehen was gebaut wird, mache aber kaum selbst Code. Erkläre kurz was du tust, aber halte es einfach.
 Hier ist der aktuelle Code:
+
+
+
+hier hast du ein feedback zum aktuellen stand. die Dateien hast du im projekt abgelegt. bitte nicht alle Dateien auf einmal anpassen
+
+Lass uns mit den Verbesserungen für index.html beginnen. Bitte gib mir den vollständigen, optimierten Code für diese Datei in einem übersichtlichen Code-Block aus, damit ich ihn direkt kopieren kann. Ändere noch keine anderen Dateien.

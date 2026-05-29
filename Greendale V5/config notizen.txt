@@ -1,0 +1,9 @@
+waS0l0x6uZR0dTUc
+
+
+API URL: https://kwtbtxebobjysxyxtsmg.supabase.co/rest/v1/
+
+anon public: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt3dGJ0eGVib2JqeXN4eXh0c21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwMDY5NDAsImV4cCI6MjA5NTU4Mjk0MH0.Ho7fK1ne40scOCsyc9vhSv5y85wDVsfNXkLsaCYDaEs
+
+
+$env:SUPABASE_URL="https://deine-url.supabase.co"; $env:SUPABASE_KEY="deinKey"; node server.js
