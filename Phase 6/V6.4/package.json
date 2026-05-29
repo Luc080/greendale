@@ -1,0 +1,16 @@
+{
+  "name": "greendale",
+  "version": "9.0.0",
+  "description": "Greendale – Everdale-inspired village builder with multiplayer",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.16.0",
+    "uuid": "^9.0.0",
+    "@supabase/supabase-js": "^2.39.0"
+  }
+}

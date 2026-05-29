@@ -1,0 +1,7 @@
+beim herinzoomen sollte das feld sich nicht auseinanderziehen lassen. also das spielbreet wird durchsichtig zum teil
+tageszyklus ist zu schnell. sagen wir alle 4-5min kannst du von morgen zu mittag wechseln und die lichtverhältnisse sind noch zu krass
+terrain sollte für jede person gleich sein. alle das gleiche spiel am spielen
+die häuser sind bedeutend besser aber eine wand fehlt noch. dach und west wand ist da. aber die süd wand fehtl noch
+
+zudem wollte ich dcoh eine 3d grafik wie in everdale. also sprich für mobile version auch spielbar. eher so:
+Ich möchte Grafiken/Assets in einem ganz bestimmten Stil erstellen. Er ist exakt angelehnt an das Mobilspiel Everdale von Supercell. Bitte nutze für alle weiteren Generierungen und Beschreibungen folgende visuelle Design-Richtlinien:Stil-Bezeichnung: Stylized 3D Casual Art, Cozy Fantasy Storybook Look.Formen (Geometry): Chunky, abgerundete und extrem vereinfachte Formen. Keine harten Kanten. Alles wirkt weich, knubbelig und leicht spielzeugartig (Toy-like).Perspektive: Isometrische Ansicht (Vogelperspektive / Orthografisch).Textur & Shading: Hand-painted Look mit weichen Farbverläufen (Gradients). Keine fotorealistischen Texturen. Matte Oberflächen mit sanften, gezielten Lichtreflexen (Specular Highlights).Farben: Hochgesättigte, warme und lebendige Farben. Dominierende Naturtöne (saftiges Grün, weiche Erdtöne).
