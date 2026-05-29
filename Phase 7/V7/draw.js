@@ -1,12 +1,10 @@
 // ============================================================
-// DRAW.JS – v6.5 THREE.JS
-// Echtes Web-3D: Stylized Isometric, Cozy Fantasy Storybook
-//  - Three.js OrthographicCamera (isometrisch)
-//  - Chunky Low-Poly Gebäude mit 4 Wänden + Dach
-//  - Bäume als 3D-Meshes (Pine + Round)
-//  - Villager als animierte 3D-Figuren
-//  - Tageszyklus via Lichtfarben
-//  - Raycaster für Gebäude-Klick
+// DRAW.JS – v7.0 Phase 7: Grafik-Optimierung
+//  - Unified Canvas: Infinite Ground Plane (kein CSS-Parallax)
+//  - Typ-spezifische Haus-Varianten (Dachform je Gebäudetyp)
+//  - Nacht-Modus: höheres Ambientlicht + Mondlicht
+//  - Fenster leuchten nachts (isWindow emissive)
+//  - Arbeits-Animation für beschäftigte Villager (sanft)
 // ============================================================
 
 var renderer, scene, camera, clock;
@@ -31,16 +29,16 @@ var tileMeshes = {};
 var selectionRing = null;
 var _lastBuildingCount = -1;
 
-// Tageszyklus
+// Tageszyklus – Nacht deutlich heller als v6.5
 var DAY_PHASES = [
   { name:'🌅 Morgen', skyTop:'#f7c86a', skyBot:'#f0a840',
-    sunColor:'#ffdd88', sunIntens:1.1, ambIntens:0.55, sx:-1, sy:2, sz:0.5 },
+    sunColor:'#ffdd88', sunIntens:1.1, ambIntens:0.55, moonIntens:0.0, sx:-1, sy:2, sz:0.5 },
   { name:'🌤 Mittag', skyTop:'#87ceeb', skyBot:'#c8e8f8',
-    sunColor:'#ffffff', sunIntens:1.4, ambIntens:0.70, sx:0,  sy:3, sz:0 },
+    sunColor:'#ffffff', sunIntens:1.4, ambIntens:0.70, moonIntens:0.0, sx:0,  sy:3, sz:0 },
   { name:'🌇 Abend',  skyTop:'#f0785a', skyBot:'#c05030',
-    sunColor:'#ff9955', sunIntens:0.9, ambIntens:0.40, sx:1,  sy:1.5, sz:0.5 },
+    sunColor:'#ff9955', sunIntens:0.9, ambIntens:0.40, moonIntens:0.0, sx:1,  sy:1.5, sz:0.5 },
   { name:'🌙 Nacht',  skyTop:'#1a2040', skyBot:'#0d1228',
-    sunColor:'#6677cc', sunIntens:0.45, ambIntens:0.55, sx:0,  sy:2,   sz:-1 }
+    sunColor:'#6677cc', sunIntens:0.45, ambIntens:0.55, moonIntens:0.35, sx:0, sy:2, sz:-1 }
 ];
 
 function getDayPhaseInfo() {
@@ -143,14 +141,19 @@ function tileToWorld(col, row) { return {x: col*TSCALE, z: row*TSCALE}; }
 
 // ---- SCENE AUFBAUEN ----
 function buildScene() {
-  // ---- UNENDLICHER BODEN (Infinite Ground Plane) ----
-  // Liegt bei y=-0.1 unter dem Spielfeld → kein Z-Fighting, kein CSS-Parallax
+  // ============================================================
+  // UNIFIED CANVAS: Infinite Ground Plane
+  // Liegt bei y=-0.10 – kein CSS-Hintergrund, kein Parallax.
+  // Alles in einer Three.js-Scene = synchrone Bewegung garantiert.
+  // ============================================================
   var groundMat = new THREE.MeshLambertMaterial({ color: new THREE.Color('#c8b87a') });
   var groundMesh = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), groundMat);
   groundMesh.rotation.x = -Math.PI / 2;
-  groundMesh.position.set(COLS*TSCALE/2, -0.10, ROWS*TSCALE/2);
+  groundMesh.position.set(COLS * TSCALE / 2, -0.10, ROWS * TSCALE / 2);
   groundMesh.receiveShadow = true;
   scene.add(groundMesh);
+
+  // Tile-Insel (das grüne Spielfeld als angehobene Plattform)
   var tileColors = {0:M.grass,1:M.grass2,2:M.dirt,3:M.water,4:M.path,5:M.sand};
   var tileGeom = new THREE.BoxGeometry(TSCALE*0.995, 0.18, TSCALE*0.995);
   waterTiles = [];
@@ -235,149 +238,238 @@ var BSIZES = {
 function makeBuilding3D(b) {
   var g=new THREE.Group(), wp=tileToWorld(b.col,b.row);
   var ms=getBM(b.type), sz=BSIZES[b.type]||{W:1.2,H:1.0,D:1.2};
-  if (b.type==='well')   _makeWell3D(g,sz.W,sz.H,sz.D,ms);
+  if (b.type==='well')        _makeWell3D(g,sz.W,sz.H,sz.D,ms);
   else if (b.type==='casino') _makeCasino3D(g,sz.W,sz.H,sz.D,ms);
-  else                   _makeStdBuilding3D(g,sz.W,sz.H,sz.D,ms,b.type);
+  else                        _makeStdBuilding3D(g,sz.W,sz.H,sz.D,ms,b.type);
   g.position.set(wp.x,0,wp.z);
   return g;
 }
 
-function _makeStdBuilding3D(g,W,H,D,ms,type) {
-  // Körper
-  var body=new THREE.Mesh(new THREE.BoxGeometry(W,H,D),ms.wall.clone());
-  body.position.set(0,H/2+.09,0); body.castShadow=true; body.receiveShadow=true; g.add(body);
+// ---- STANDARD GEBÄUDE mit typ-spezifischen Dachformen ----
+function _makeWinMat() {
+  // Fenster-Material mit isWindow-Flag für Nacht-Glow
+  var mat = new THREE.MeshLambertMaterial({
+    color: new THREE.Color('#d4eeff'),
+    emissive: new THREE.Color(0x000000)
+  });
+  mat.userData = { isWindow: true };
+  return mat;
+}
 
-  // ---- DACH: je nach Gebäudetyp andere Form ----
-  var roofH=H*.55;
-  if (type==='townhall'||type==='bakery'||type==='well') {
-    // Hohe Pyramide mit Dachspitze-Aufsatz (Rathaus-Charakter)
-    var roof=new THREE.Mesh(new THREE.ConeGeometry(W*.78,roofH*1.1,4),ms.roof.clone());
-    roof.rotation.y=Math.PI/4; roof.position.set(0,H+.09+roofH*.55,0); roof.castShadow=true; g.add(roof);
+function _makeStdBuilding3D(g, W, H, D, ms, type) {
+  // --- Körper ---
+  var body = new THREE.Mesh(new THREE.BoxGeometry(W, H, D), ms.wall.clone());
+  body.position.set(0, H/2 + 0.09, 0);
+  body.castShadow = true; body.receiveShadow = true;
+  g.add(body);
+
+  // --- Dach je nach Gebäudetyp ---
+  var roofH = H * 0.55;
+  var roofMat = ms.roof.clone();
+
+  if (type === 'townhall' || type === 'bakery') {
+    // Rathaus / Bäckerei: Hohe steile Pyramide + Türmchen
+    var roof = new THREE.Mesh(new THREE.ConeGeometry(W * 0.78, roofH * 1.15, 4), roofMat);
+    roof.rotation.y = Math.PI / 4;
+    roof.position.set(0, H + 0.09 + roofH * 0.575, 0);
+    roof.castShadow = true; g.add(roof);
     // Kleines Türmchen oben
-    var spire=new THREE.Mesh(new THREE.ConeGeometry(W*.12,H*.45,6),ms.roof.clone());
-    spire.position.set(0,H+.09+roofH*1.1+H*.22,0); spire.castShadow=true; g.add(spire);
-  } else if (type==='farm'||type==='warehouse'||type==='carpentry') {
-    // Satteldach (Scheune-Style): langer First
-    var roofBox=new THREE.Mesh(new THREE.BoxGeometry(W*1.08,roofH*.28,D*1.08),ms.roof.clone());
-    roofBox.position.set(0,H+.09+roofH*.14,0); g.add(roofBox);
-    // Giebel links/rechts
-    var gL=new THREE.Mesh(new THREE.ConeGeometry(D*.62,roofH*.9,4),ms.roof.clone());
-    gL.rotation.y=Math.PI/4; gL.position.set(-W*.36,H+.09+roofH*.45,0); gL.castShadow=true; g.add(gL);
-    var gR=new THREE.Mesh(new THREE.ConeGeometry(D*.62,roofH*.9,4),ms.roof.clone());
-    gR.rotation.y=Math.PI/4; gR.position.set(W*.36,H+.09+roofH*.45,0); gR.castShadow=true; g.add(gR);
-  } else if (type==='smithy'||type==='quarry'||type==='brickyard') {
-    // Flaches Walmdach mit Überhang (Industrie-Style)
-    var roofFlat=new THREE.Mesh(new THREE.BoxGeometry(W*1.18,roofH*.18,D*1.18),ms.roof.clone());
-    roofFlat.position.set(0,H+.09+roofH*.09,0); roofFlat.castShadow=true; g.add(roofFlat);
-    var roofPyra=new THREE.Mesh(new THREE.ConeGeometry(W*.65,roofH*.55,4),ms.roof.clone());
-    roofPyra.rotation.y=Math.PI/4; roofPyra.position.set(0,H+.09+roofH*.18+roofH*.275,0); g.add(roofPyra);
-  } else if (type==='sawmill') {
-    // Offenes Scheddach (Sägezahn-Fabrik)
-    for (var si=0;si<2;si++) {
-      var shed=new THREE.Mesh(new THREE.ConeGeometry(W*.42,roofH*.75,3),ms.roof.clone());
-      shed.rotation.y=Math.PI/6; shed.position.set(-W*.22+si*W*.44,H+.09+roofH*.375,0); shed.castShadow=true; g.add(shed);
+    var spire = new THREE.Mesh(new THREE.ConeGeometry(W * 0.11, H * 0.5, 6), roofMat.clone());
+    spire.position.set(0, H + 0.09 + roofH * 1.15 + H * 0.25, 0);
+    spire.castShadow = true; g.add(spire);
+
+  } else if (type === 'farm' || type === 'warehouse') {
+    // Farm / Lager: Breites Satteldach (Scheunenstil)
+    // Dachboden-Box als First
+    var ridgeBox = new THREE.Mesh(new THREE.BoxGeometry(W * 1.1, roofH * 0.25, D * 1.1), roofMat);
+    ridgeBox.position.set(0, H + 0.09 + roofH * 0.125, 0);
+    g.add(ridgeBox);
+    // Zwei seitliche Giebel-Prismen
+    for (var side = -1; side <= 1; side += 2) {
+      var gable = new THREE.Mesh(new THREE.ConeGeometry(D * 0.6, roofH * 1.0, 4), roofMat.clone());
+      gable.rotation.y = Math.PI / 4;
+      gable.position.set(side * W * 0.38, H + 0.09 + roofH * 0.5 + roofH * 0.125, 0);
+      gable.castShadow = true; g.add(gable);
     }
-  } else if (type==='kitchen') {
-    // Klassische Pyramide mit breitem Dachüberstand
-    var roofOvr=new THREE.Mesh(new THREE.ConeGeometry(W*.85,roofH,4),ms.roof.clone());
-    roofOvr.rotation.y=Math.PI/4; roofOvr.position.set(0,H+.09+roofH/2,0); roofOvr.castShadow=true; g.add(roofOvr);
+
+  } else if (type === 'carpentry') {
+    // Zimmerei: Asymmetrisches Pultdach (eine Seite höher)
+    var mainRoof = new THREE.Mesh(new THREE.ConeGeometry(W * 0.72, roofH, 4), roofMat);
+    mainRoof.rotation.y = Math.PI / 4;
+    mainRoof.position.set(0, H + 0.09 + roofH / 2, 0);
+    mainRoof.castShadow = true; g.add(mainRoof);
+    // Kleiner Anbau
+    var annex = new THREE.Mesh(new THREE.BoxGeometry(W * 0.45, H * 0.7, D * 0.45), ms.wall.clone());
+    annex.position.set(-W * 0.58, H * 0.35 + 0.09, 0);
+    annex.castShadow = true; g.add(annex);
+    var annexRoof = new THREE.Mesh(new THREE.ConeGeometry(W * 0.38, roofH * 0.55, 4), roofMat.clone());
+    annexRoof.rotation.y = Math.PI / 4;
+    annexRoof.position.set(-W * 0.58, H * 0.7 + 0.09 + roofH * 0.275, 0);
+    annexRoof.castShadow = true; g.add(annexRoof);
+
+  } else if (type === 'smithy' || type === 'brickyard') {
+    // Schmiede / Ziegelei: Schweres Walmdach mit dickem Überhang
+    var flatTop = new THREE.Mesh(new THREE.BoxGeometry(W * 1.2, roofH * 0.2, D * 1.2), roofMat);
+    flatTop.position.set(0, H + 0.09 + roofH * 0.1, 0);
+    flatTop.castShadow = true; g.add(flatTop);
+    var heavyPyra = new THREE.Mesh(new THREE.ConeGeometry(W * 0.62, roofH * 0.7, 4), roofMat.clone());
+    heavyPyra.rotation.y = Math.PI / 4;
+    heavyPyra.position.set(0, H + 0.09 + roofH * 0.2 + roofH * 0.35, 0);
+    heavyPyra.castShadow = true; g.add(heavyPyra);
+
+  } else if (type === 'quarry') {
+    // Steinbruch: Flaches Pultdach, robuster Look
+    var flatRoof = new THREE.Mesh(new THREE.BoxGeometry(W * 1.12, roofH * 0.18, D * 1.12), roofMat);
+    flatRoof.position.set(0, H + 0.09 + roofH * 0.09, 0);
+    flatRoof.castShadow = true; g.add(flatRoof);
+
+  } else if (type === 'sawmill') {
+    // Sägewerk: Zwei versetzt übereinander liegende Scheddächer
+    for (var si = 0; si < 2; si++) {
+      var shed = new THREE.Mesh(new THREE.ConeGeometry(W * 0.44, roofH * 0.8, 3), roofMat.clone());
+      shed.rotation.y = Math.PI / 6;
+      shed.position.set(-W * 0.24 + si * W * 0.48, H + 0.09 + roofH * 0.4, 0);
+      shed.castShadow = true; g.add(shed);
+    }
+
+  } else if (type === 'kitchen') {
+    // Küche: Breites Pyramidendach mit Überstand
+    var kitRoof = new THREE.Mesh(new THREE.ConeGeometry(W * 0.88, roofH, 4), roofMat);
+    kitRoof.rotation.y = Math.PI / 4;
+    kitRoof.position.set(0, H + 0.09 + roofH / 2, 0);
+    kitRoof.castShadow = true; g.add(kitRoof);
+
   } else {
-    // Fallback: Standard Pyramide
-    var roofStd=new THREE.Mesh(new THREE.ConeGeometry(W*.72,roofH,4),ms.roof.clone());
-    roofStd.rotation.y=Math.PI/4; roofStd.position.set(0,H+.09+roofH/2,0); roofStd.castShadow=true; g.add(roofStd);
+    // Fallback: Standard-Pyramide
+    var stdRoof = new THREE.Mesh(new THREE.ConeGeometry(W * 0.72, roofH, 4), roofMat);
+    stdRoof.rotation.y = Math.PI / 4;
+    stdRoof.position.set(0, H + 0.09 + roofH / 2, 0);
+    stdRoof.castShadow = true; g.add(stdRoof);
   }
 
-  // ---- FENSTER (mit isWindow-Flag für Nacht-Glow) ----
-  var wM=new THREE.MeshLambertMaterial({color:new THREE.Color('#d4eeff'),emissive:new THREE.Color(0x000000)});
-  var wG=new THREE.BoxGeometry(W*.18,H*.22,.04);
-  var w1=new THREE.Mesh(wG,wM.clone()); w1.position.set(-W*.22,H*.56+.09,D/2+.02); w1.userData.isWindow=true; g.add(w1);
-  var w2=new THREE.Mesh(wG,wM.clone()); w2.position.set(W*.22,H*.56+.09,D/2+.02); w2.userData.isWindow=true; g.add(w2);
-  // Fenster Seite
-  var wGS=new THREE.BoxGeometry(.04,H*.22,D*.18);
-  var w3=new THREE.Mesh(wGS,wM.clone()); w3.position.set(W/2+.02,H*.56+.09,0); w3.userData.isWindow=true; g.add(w3);
-  // Tür
-  var dr=new THREE.Mesh(new THREE.BoxGeometry(W*.22,H*.42,.05),M.door.clone());
-  dr.position.set(0,H*.21+.09,D/2+.025); g.add(dr);
-  // Details
-  _addDetails3D(g,type,W,H,D);
-  // Hitbox
-  var hb=new THREE.Mesh(new THREE.BoxGeometry(W*1.1,H*1.6,D*1.1),M.hit.clone());
-  hb.position.set(0,H/2+.09,0); hb.userData.isHitBox=true; g.add(hb);
+  // --- Fenster (isWindow = true → Nacht-Glow via updateDayLight) ---
+  var wG  = new THREE.BoxGeometry(W * 0.18, H * 0.22, 0.04);
+  var wGS = new THREE.BoxGeometry(0.04, H * 0.22, D * 0.18);
+
+  var wm1 = _makeWinMat();
+  var w1 = new THREE.Mesh(wG, wm1);
+  w1.position.set(-W * 0.22, H * 0.56 + 0.09, D / 2 + 0.02);
+  w1.userData.isWindow = true; g.add(w1);
+
+  var wm2 = _makeWinMat();
+  var w2 = new THREE.Mesh(wG, wm2);
+  w2.position.set(W * 0.22, H * 0.56 + 0.09, D / 2 + 0.02);
+  w2.userData.isWindow = true; g.add(w2);
+
+  var wm3 = _makeWinMat();
+  var w3 = new THREE.Mesh(wGS, wm3);
+  w3.position.set(W / 2 + 0.02, H * 0.56 + 0.09, 0);
+  w3.userData.isWindow = true; g.add(w3);
+
+  // --- Tür ---
+  var dr = new THREE.Mesh(new THREE.BoxGeometry(W * 0.22, H * 0.42, 0.05), M.door.clone());
+  dr.position.set(0, H * 0.21 + 0.09, D / 2 + 0.025);
+  g.add(dr);
+
+  // --- Typ-spezifische Details ---
+  _addDetails3D(g, type, W, H, D);
+
+  // --- Hitbox ---
+  var hb = new THREE.Mesh(new THREE.BoxGeometry(W * 1.1, H * 1.6, D * 1.1), M.hit.clone());
+  hb.position.set(0, H / 2 + 0.09, 0);
+  hb.userData.isHitBox = true;
+  g.add(hb);
 }
 
-function _addDetails3D(g,type,W,H,D) {
-  // Schornstein (mehr Gebäudetypen)
-  if (type==='kitchen'||type==='bakery'||type==='smithy'||type==='brickyard'||type==='carpentry') {
-    var chW=type==='smithy'?W*.16:W*.12;
-    var chH=type==='smithy'?H*.65:H*.5;
-    var ch=new THREE.Mesh(new THREE.BoxGeometry(chW,chH,chW),M.chimney.clone());
-    ch.position.set(W*.28,H+.09,D*.15*-1); ch.castShadow=true; g.add(ch);
+// ---- GEBÄUDE-DETAILS je Typ ----
+function _addDetails3D(g, type, W, H, D) {
+  // Schornstein (mehrere Gebäudetypen)
+  if (type==='kitchen' || type==='bakery' || type==='smithy' || type==='brickyard' || type==='carpentry') {
+    var chW = type==='smithy' ? W*0.16 : W*0.12;
+    var chH = type==='smithy' ? H*0.65 : H*0.50;
+    var ch = new THREE.Mesh(new THREE.BoxGeometry(chW, chH, chW), M.chimney.clone());
+    ch.position.set(W*0.28, H + 0.09, -D*0.15);
+    ch.castShadow = true; g.add(ch);
     // Schornstein-Kappe
-    var cap=new THREE.Mesh(new THREE.BoxGeometry(chW*1.4,chH*.08,chW*1.4),M.chimney.clone());
-    cap.position.set(W*.28,H+.09+chH*.54,D*.15*-1); g.add(cap);
-    var sm=new THREE.Mesh(new THREE.SphereGeometry(.09,6,4),mLamb('#aaaaaa'));
-    sm.material.transparent=true; sm.material.opacity=0.35;
-    sm.position.set(W*.28,H+.09+chH*.58,-D*.15); sm.userData.isSmoke=true; g.add(sm);
+    var cap = new THREE.Mesh(new THREE.BoxGeometry(chW*1.45, chH*0.09, chW*1.45), M.chimney.clone());
+    cap.position.set(W*0.28, H + 0.09 + chH*0.545, -D*0.15);
+    g.add(cap);
+    // Rauch-Puff
+    var sm = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 4), mLamb('#aaaaaa'));
+    sm.material.transparent = true; sm.material.opacity = 0.35;
+    sm.position.set(W*0.28, H + 0.09 + chH*0.60, -D*0.15);
+    sm.userData.isSmoke = true; g.add(sm);
   }
+
   // Sägeblatt
-  if (type==='sawmill') {
-    var bl=new THREE.Mesh(new THREE.CylinderGeometry(.22,.22,.04,12),M.blade.clone());
-    bl.rotation.z=Math.PI/2; bl.position.set(W/2+.08,H*.55+.09,0); bl.userData.isBlade=true; g.add(bl);
+  if (type === 'sawmill') {
+    var bl = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.04, 12), M.blade.clone());
+    bl.rotation.z = Math.PI / 2;
+    bl.position.set(W/2 + 0.08, H*0.55 + 0.09, 0);
+    bl.userData.isBlade = true; g.add(bl);
   }
+
   // Fässer (Lager)
-  if (type==='warehouse') {
-    var bM=M.barrel.clone();
-    for (var bi=0;bi<3;bi++) {
-      var bar=new THREE.Mesh(new THREE.CylinderGeometry(.10,.10,.28,8),bM.clone());
-      bar.position.set(-W*.35+bi*.22,.23,D*.52); g.add(bar);
+  if (type === 'warehouse') {
+    for (var bi = 0; bi < 3; bi++) {
+      var bar = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.10, 0.28, 8), M.barrel.clone());
+      bar.position.set(-W*0.35 + bi*0.22, 0.23, D*0.52); g.add(bar);
     }
-    // Kleines Schild
-    var sign=new THREE.Mesh(new THREE.BoxGeometry(W*.35,H*.18,.05),mLamb('#c8a060'));
-    sign.position.set(0,H*.78+.09,D/2+.03); g.add(sign);
+    // Schild
+    var sign = new THREE.Mesh(new THREE.BoxGeometry(W*0.35, H*0.18, 0.05), mLamb('#c8a060'));
+    sign.position.set(0, H*0.78 + 0.09, D/2 + 0.03); g.add(sign);
   }
-  // Stein (Steinbruch)
-  if (type==='quarry') {
-    var st=new THREE.Mesh(new THREE.BoxGeometry(.4,.15,.4),M.stone.clone());
-    st.position.set(0,.17,D*.52); g.add(st);
-    var st2=new THREE.Mesh(new THREE.BoxGeometry(.22,.20,.22),M.stone.clone());
-    st2.position.set(.28,.19,D*.35); g.add(st2);
+
+  // Steine (Steinbruch)
+  if (type === 'quarry') {
+    var st1 = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.16, 0.40), M.stone.clone());
+    st1.position.set(0, 0.17, D*0.52); g.add(st1);
+    var st2 = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.22), M.stone.clone());
+    st2.position.set(0.28, 0.20, D*0.38); g.add(st2);
   }
-  // Heu (Farm)
-  if (type==='farm') {
-    var hay=new THREE.Mesh(new THREE.CylinderGeometry(.22,.28,.35,8),mLamb('#e8c840'));
-    hay.position.set(W*.42,.26,-D*.35); g.add(hay);
-    // Zaun-Pfosten
-    for (var fi=0;fi<3;fi++) {
-      var fp=new THREE.Mesh(new THREE.BoxGeometry(.05,.22,.05),mLamb('#c8a070'));
-      fp.position.set(-W*.5+fi*W*.3,.11,D*.52); g.add(fp);
+
+  // Heu + Zaun (Farm)
+  if (type === 'farm') {
+    var hay = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.28, 0.35, 8), mLamb('#e8c840'));
+    hay.position.set(W*0.42, 0.26, -D*0.35); g.add(hay);
+    for (var fi = 0; fi < 3; fi++) {
+      var fp = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.22, 0.05), mLamb('#c8a070'));
+      fp.position.set(-W*0.5 + fi*W*0.28, 0.11, D*0.52); g.add(fp);
     }
   }
+
   // Amboss (Schmiede)
-  if (type==='smithy') {
-    var anv=new THREE.Mesh(new THREE.BoxGeometry(.28,.18,.18),M.stone.clone());
-    anv.position.set(-W*.3,.23,D*.52); g.add(anv);
+  if (type === 'smithy') {
+    var anv = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.18, 0.18), M.stone.clone());
+    anv.position.set(-W*0.3, 0.23, D*0.52); g.add(anv);
   }
+
   // Mehlsäcke (Bäckerei)
-  if (type==='bakery') {
-    var sack=new THREE.Mesh(new THREE.SphereGeometry(.12,7,5),mLamb('#e8e0c8'));
-    sack.scale.set(1,.75,1); sack.position.set(W*.42,.17,D*.52); g.add(sack);
+  if (type === 'bakery') {
+    var sack = new THREE.Mesh(new THREE.SphereGeometry(0.12, 7, 5), mLamb('#e8e0c8'));
+    sack.scale.set(1, 0.75, 1);
+    sack.position.set(W*0.42, 0.17, D*0.52); g.add(sack);
   }
+
   // Holzstapel (Zimmerei)
-  if (type==='carpentry') {
-    for (var li=0;li<3;li++) {
-      var log=new THREE.Mesh(new THREE.CylinderGeometry(.06,.06,.38,7),M.trunk.clone());
-      log.rotation.z=Math.PI/2; log.position.set(-W*.3+li*.16,.09+li*.07,D*.52); g.add(log);
+  if (type === 'carpentry') {
+    for (var li = 0; li < 3; li++) {
+      var log = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.38, 7), M.trunk.clone());
+      log.rotation.z = Math.PI / 2;
+      log.position.set(-W*0.3 + li*0.16, 0.09 + li*0.06, D*0.52); g.add(log);
     }
   }
+
   // Ziegelstapel (Ziegelei)
-  if (type==='brickyard') {
-    for (var bri=0;bri<4;bri++) {
-      var brick=new THREE.Mesh(new THREE.BoxGeometry(.20,.07,.09),mLamb('#c06040'));
-      brick.position.set(-W*.28+bri*.16,.09,D*.52); g.add(brick);
+  if (type === 'brickyard') {
+    for (var bri = 0; bri < 4; bri++) {
+      var brick = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.07, 0.09), mLamb('#c06040'));
+      brick.position.set(-W*0.28 + bri*0.16, 0.09, D*0.52); g.add(brick);
     }
   }
 }
 
+// ---- BRUNNEN ----
 function _makeWell3D(g,W,H,D,ms) {
   var base=new THREE.Mesh(new THREE.CylinderGeometry(W*.5,W*.55,H*.35,10),ms.wall.clone());
   base.position.set(0,H*.175+.09,0); base.castShadow=true; g.add(base);
@@ -395,6 +487,7 @@ function _makeWell3D(g,W,H,D,ms) {
   hb.position.set(0,H*.5,0); hb.userData.isHitBox=true; g.add(hb);
 }
 
+// ---- CASINO ----
 function _makeCasino3D(g,W,H,D,ms) {
   var body=new THREE.Mesh(new THREE.BoxGeometry(W,H,D),ms.wall.clone());
   body.position.set(0,H/2+.09,0); body.castShadow=true; g.add(body);
@@ -487,267 +580,345 @@ function syncVillagers() {
   }
 }
 
+// ---- VILLAGER ANIMATIONEN ----
 function animateVillagers(dt) {
-  for (var i=0;i<state.villagers.length;i++) {
-    var v=state.villagers[i], vg=villagerMeshes[v.id]; if(!vg) continue;
-    var wp=tileToWorld(v.x,v.y); vg.position.set(wp.x,0,wp.z);
-    var spd=Math.sqrt(v.vx*v.vx+v.vy*v.vy);
-    v.anim=(v.anim||0)+(spd>.005?.055:.012);
-    if(spd>.005){var ang=Math.atan2(v.vx,v.vy);vg.rotation.y=ang;}
-    var ud=vg.userData;
-    var isWorking = v.buildingId!==null && spd<=0.005;
-    if(spd>.005){
-      // Lauf-Animation
-      var sw=Math.sin(v.anim*Math.PI*2)*.35;
-      if(ud.legL)ud.legL.rotation.x=sw; if(ud.legR)ud.legR.rotation.x=-sw;
-      if(ud.aL)ud.aL.rotation.x=-sw*.7; if(ud.aR)ud.aR.rotation.x=sw*.7;
-      var bob=Math.sin(v.anim*Math.PI*2)*.022;
-      if(ud.body)ud.body.position.y=.44+bob; if(ud.head)ud.head.position.y=.78+bob;
-      if(ud.body)ud.body.rotation.x=0;
-    } else if(isWorking) {
-      // Arbeits-Animation: sanftes Hacken/Bauen (~1 Schlag/Sek)
-      var wt=Math.sin(v.anim*Math.PI*1.4); // langsame Frequenz
-      var armSwing=wt*.45;
-      if(ud.aR)ud.aR.rotation.x=armSwing;      // rechter Arm schlägt vor/zurück
-      if(ud.aL)ud.aL.rotation.x=-armSwing*.35; // linker Arm gegenläufig leicht
-      if(ud.legL)ud.legL.rotation.x=0; if(ud.legR)ud.legR.rotation.x=0;
-      // Leichtes Vorbeugen beim Arbeiten
-      var lean=0.12+wt*.06;
-      if(ud.body)ud.body.rotation.x=lean; if(ud.head)ud.head.rotation.x=lean*.5;
-      if(ud.body)ud.body.position.y=.44; if(ud.head)ud.head.position.y=.78;
-    } else {
-      // Idle: sanftes Atmen
-      var breathe=Math.sin(v.anim*.5)*.018;
-      if(ud.aL)ud.aL.rotation.x=Math.sin(v.anim*.5)*.04;
-      if(ud.aR)ud.aR.rotation.x=-Math.sin(v.anim*.5)*.04;
-      if(ud.legL)ud.legL.rotation.x=0; if(ud.legR)ud.legR.rotation.x=0;
-      if(ud.body){ud.body.rotation.x=0; ud.body.position.y=.44+breathe;}
-      if(ud.head){ud.head.rotation.x=0; ud.head.position.y=.78+breathe;}
+  for (var i = 0; i < state.villagers.length; i++) {
+    var v = state.villagers[i];
+    var vg = villagerMeshes[v.id];
+    if (!vg) continue;
+
+    var wp = tileToWorld(v.x, v.y);
+    vg.position.set(wp.x, 0, wp.z);
+
+    var spd = Math.sqrt(v.vx * v.vx + v.vy * v.vy);
+    // Animationsgeschwindigkeit: beim Laufen schneller, sonst langsam
+    v.anim = (v.anim || 0) + (spd > 0.005 ? 0.055 : 0.010);
+
+    if (spd > 0.005) {
+      vg.rotation.y = Math.atan2(v.vx, v.vy);
     }
-    var isSel=state.selectedVillager===v.id;
-    vg.traverse(function(o){
-      if(o.isMesh&&o.material)
-        o.material.emissive=isSel?new THREE.Color(0x443300):new THREE.Color(0x000000);
+
+    var ud = vg.userData;
+    var isWorking = (v.buildingId !== null) && (spd <= 0.005);
+
+    if (spd > 0.005) {
+      // --- Lauf-Animation ---
+      var sw = Math.sin(v.anim * Math.PI * 2) * 0.35;
+      if (ud.legL) ud.legL.rotation.x =  sw;
+      if (ud.legR) ud.legR.rotation.x = -sw;
+      if (ud.aL)   ud.aL.rotation.x   = -sw * 0.7;
+      if (ud.aR)   ud.aR.rotation.x   =  sw * 0.7;
+      var bob = Math.sin(v.anim * Math.PI * 2) * 0.022;
+      if (ud.body) { ud.body.position.y = 0.44 + bob; ud.body.rotation.x = 0; }
+      if (ud.head) { ud.head.position.y = 0.78 + bob; ud.head.rotation.x = 0; }
+
+    } else if (isWorking) {
+      // --- Arbeits-Animation (sanft, ~1 Hub/Sek) ---
+      // Frequenz 1.3 = ca. 1 vollständiger Schlag pro Sekunde
+      var wt = Math.sin(v.anim * Math.PI * 1.3);
+      var armSwing = wt * 0.42;  // rechter Arm auf/ab
+      if (ud.aR)   ud.aR.rotation.x   = armSwing;
+      if (ud.aL)   ud.aL.rotation.x   = -armSwing * 0.30;  // linker Arm leicht gegenläufig
+      if (ud.legL) ud.legL.rotation.x = 0;
+      if (ud.legR) ud.legR.rotation.x = 0;
+      // Leichtes Vorbeugen beim Arbeiten
+      var lean = 0.10 + Math.max(0, wt) * 0.08;
+      if (ud.body) { ud.body.rotation.x = lean; ud.body.position.y = 0.44; }
+      if (ud.head) { ud.head.rotation.x = lean * 0.4; ud.head.position.y = 0.78; }
+
+    } else {
+      // --- Idle: sanftes Atmen ---
+      var breathe = Math.sin(v.anim * 0.5) * 0.016;
+      if (ud.aL)   ud.aL.rotation.x   =  Math.sin(v.anim * 0.5) * 0.04;
+      if (ud.aR)   ud.aR.rotation.x   = -Math.sin(v.anim * 0.5) * 0.04;
+      if (ud.legL) ud.legL.rotation.x = 0;
+      if (ud.legR) ud.legR.rotation.x = 0;
+      if (ud.body) { ud.body.rotation.x = 0; ud.body.position.y = 0.44 + breathe; }
+      if (ud.head) { ud.head.rotation.x = 0; ud.head.position.y = 0.78 + breathe; }
+    }
+
+    var isSel = state.selectedVillager === v.id;
+    vg.traverse(function(o) {
+      if (o.isMesh && o.material)
+        o.material.emissive = isSel ? new THREE.Color(0x443300) : new THREE.Color(0x000000);
     });
   }
 }
 
 // ---- SYNC BUILDINGS ----
 function syncBuildings() {
-  if(state.buildings.length!==_lastBuildingCount){rebuildAllBuildings();updateSelectionRing();}
-  for(var bid in buildingMeshes){
-    var bg=buildingMeshes[bid];
-    var isSel=state.selectedBuilding===parseInt(bid);
-    bg.traverse(function(o){
-      if(o.isMesh&&o.material&&!o.userData.isHitBox&&!o.userData.isWindow)
-        o.material.emissive=isSel?new THREE.Color(0x443300):new THREE.Color(0x000000);
+  if (state.buildings.length !== _lastBuildingCount) {
+    rebuildAllBuildings();
+    updateSelectionRing();
+  }
+  for (var bid in buildingMeshes) {
+    var bg = buildingMeshes[bid];
+    var isSel = state.selectedBuilding === parseInt(bid);
+    bg.traverse(function(o) {
+      // isWindow-Meshes NICHT mit Selektion-Emissive überschreiben
+      // (deren Emissive wird von updateDayLight gesteuert)
+      if (o.isMesh && o.material && !o.userData.isHitBox && !o.userData.isWindow) {
+        o.material.emissive = isSel ? new THREE.Color(0x443300) : new THREE.Color(0x000000);
+      }
     });
   }
 }
 
 // ---- WASSER ----
 function animateWater(dt) {
-  waterAnim+=dt*.6;
-  for(var i=0;i<waterTiles.length;i++){
-    var t=waterTiles[i];
-    var hue=(198+Math.sin(waterAnim+i*.4)*4)/360;
-    t.material.color.setHSL(hue,.65,.56);
-    t.position.y=-.05+Math.sin(waterAnim*.7+i*.3)*.012;
+  waterAnim += dt * 0.6;
+  for (var i = 0; i < waterTiles.length; i++) {
+    var t = waterTiles[i];
+    var hue = (198 + Math.sin(waterAnim + i * 0.4) * 4) / 360;
+    t.material.color.setHSL(hue, 0.65, 0.56);
+    t.position.y = -0.05 + Math.sin(waterAnim * 0.7 + i * 0.3) * 0.012;
   }
 }
 
 // ---- GEBÄUDE-ANIMATION ----
 function animateBuildings(dt) {
-  for(var bid in buildingMeshes){
-    var bg=buildingMeshes[bid];
-    bg.traverse(function(o){
-      if(o.userData.isBlade){
-        var hw=state.villagers.some(function(v){return v.buildingId===parseInt(bid);});
-        if(hw) o.rotation.x+=dt*3.5;
+  for (var bid in buildingMeshes) {
+    var bg = buildingMeshes[bid];
+    var hasWorker = state.villagers.some(function(v) { return v.buildingId === parseInt(bid); });
+    bg.traverse(function(o) {
+      if (o.userData.isBlade) {
+        if (hasWorker) o.rotation.x += dt * 3.5;
       }
-      if(o.userData.isSmoke){
-        var sc=.7+Math.sin(waterAnim*1.5+parseInt(bid))*.3;
-        o.scale.setScalar(sc); o.material.opacity=.22+Math.sin(waterAnim+parseInt(bid))*.12;
+      if (o.userData.isSmoke) {
+        var sc = 0.7 + Math.sin(waterAnim * 1.5 + parseInt(bid)) * 0.3;
+        o.scale.setScalar(sc);
+        o.material.opacity = 0.22 + Math.sin(waterAnim + parseInt(bid)) * 0.12;
       }
-      if(o.userData.isNeonLight){
-        var on=Math.sin(waterAnim*2+o.userData.lightIdx*1.1)>0;
-        o.material.emissive.setScalar(on?.7:.08);
+      if (o.userData.isNeonLight) {
+        var on = Math.sin(waterAnim * 2 + o.userData.lightIdx * 1.1) > 0;
+        o.material.emissive.setScalar(on ? 0.7 : 0.08);
       }
-      if(o.userData.isNeon){o.material.emissive.setScalar(.3+Math.sin(waterAnim*1.5)*.25);}
+      if (o.userData.isNeon) {
+        o.material.emissive.setScalar(0.3 + Math.sin(waterAnim * 1.5) * 0.25);
+      }
     });
   }
 }
 
-// ---- TAGESLICHT ----
+// ---- TAGESLICHT & FENSTER-GLOW ----
 function updateDayLight() {
-  var dp=getDayPhaseInfo();
-  var sc=lerpHexColor(dp.cur.sunColor,dp.next.sunColor,dp.t);
-  var si=lN(dp.cur.sunIntens,dp.next.sunIntens,dp.t);
-  var ai=lN(dp.cur.ambIntens,dp.next.ambIntens,dp.t);
-  if(sunLight){sunLight.color.set(sc);sunLight.intensity=si;
-    sunLight.position.set(lN(dp.cur.sx,dp.next.sx,dp.t)*15,lN(dp.cur.sy,dp.next.sy,dp.t)*15,lN(dp.cur.sz,dp.next.sz,dp.t)*15);}
-  if(ambLight)ambLight.intensity=ai;
-  if(hemiLight){hemiLight.intensity=ai*.55;
-    hemiLight.color=lerpHexColor(dp.cur.skyTop,dp.next.skyTop,dp.t);
-    hemiLight.groundColor=lerpHexColor(dp.cur.skyBot,dp.next.skyBot,dp.t);}
-  // Mondlicht: nur nachts einblenden
-  var isNight = dp.idx===3 || (dp.idx===2 && dp.t>0);
-  var nightT = dp.idx===3 ? 1.0 : (dp.idx===2 ? dp.t : 0);
-  if(moonLight) moonLight.intensity = nightT * 0.35;
-  // Fog-Farbe dem Himmel anpassen
-  var skyC = lerpHexColor(dp.cur.skyTop,dp.next.skyTop,dp.t);
-  if(renderer) renderer.setClearColor(skyC);
-  if(scene.fog) scene.fog.color.set(skyC);
-  // Fenster-Leuchten nachts
-  var winGlow = new THREE.Color(0xffcc44).multiplyScalar(nightT * 0.7);
-  for(var bid in buildingMeshes){
-    buildingMeshes[bid].traverse(function(o){
-      if(o.userData.isWindow) o.material.emissive.copy(winGlow);
+  var dp = getDayPhaseInfo();
+  var sc = lerpHexColor(dp.cur.sunColor, dp.next.sunColor, dp.t);
+  var si = lN(dp.cur.sunIntens, dp.next.sunIntens, dp.t);
+  var ai = lN(dp.cur.ambIntens, dp.next.ambIntens, dp.t);
+  var mi = lN(dp.cur.moonIntens, dp.next.moonIntens, dp.t);
+
+  if (sunLight) {
+    sunLight.color.set(sc);
+    sunLight.intensity = si;
+    sunLight.position.set(
+      lN(dp.cur.sx, dp.next.sx, dp.t) * 15,
+      lN(dp.cur.sy, dp.next.sy, dp.t) * 15,
+      lN(dp.cur.sz, dp.next.sz, dp.t) * 15
+    );
+  }
+  if (ambLight)  ambLight.intensity = ai;
+  if (moonLight) moonLight.intensity = mi;
+  if (hemiLight) {
+    hemiLight.intensity = ai * 0.55;
+    hemiLight.color      = lerpHexColor(dp.cur.skyTop, dp.next.skyTop, dp.t);
+    hemiLight.groundColor= lerpHexColor(dp.cur.skyBot, dp.next.skyBot, dp.t);
+  }
+
+  // Hintergrundfarbe + Fog synchron mit Himmel
+  var skyColor = lerpHexColor(dp.cur.skyTop, dp.next.skyTop, dp.t);
+  if (renderer) renderer.setClearColor(skyColor);
+  if (scene.fog) scene.fog.color.set(skyColor);
+
+  // Fenster-Glow: Nacht-Intensität 0..1
+  var nightT = (dp.idx === 3) ? 1.0 : (dp.idx === 2 ? dp.t : 0.0);
+  var winR = 0.55 * nightT;
+  var winG = 0.42 * nightT;
+  var winB = 0.05 * nightT;
+  for (var bid in buildingMeshes) {
+    buildingMeshes[bid].traverse(function(o) {
+      if (o.isMesh && o.userData.isWindow) {
+        o.material.emissive.setRGB(winR, winG, winB);
+      }
     });
   }
-  var timeEl=document.getElementById('time-chip');
-  if(timeEl) timeEl.textContent=DAY_PHASES[dp.idx].name+' · Tag '+state.day;
+
+  var timeEl = document.getElementById('time-chip');
+  if (timeEl) timeEl.textContent = DAY_PHASES[dp.idx].name + ' · Tag ' + state.day;
 }
 
 // ---- KAMERA ----
 function setupCamera() {
-  var wrap=document.getElementById('canvas-wrap');
-  var W=wrap.clientWidth||window.innerWidth, H=wrap.clientHeight||window.innerHeight;
-  var aspect=W/H, frustH=10;
-  camera=new THREE.OrthographicCamera(-frustH*aspect,frustH*aspect,frustH,-frustH,.1,300);
-  camTarget.x=COLS*TSCALE/2; camTarget.z=ROWS*TSCALE/2;
-  var dist=25;
-  camera.position.set(camTarget.x+dist,dist*.82,camTarget.z+dist);
-  camera.lookAt(new THREE.Vector3(camTarget.x,0,camTarget.z));
-  camera.zoom=camZoom; camera.updateProjectionMatrix();
+  var wrap = document.getElementById('canvas-wrap');
+  var W = wrap.clientWidth || window.innerWidth;
+  var H = wrap.clientHeight || window.innerHeight;
+  var aspect = W / H, frustH = 10;
+  camera = new THREE.OrthographicCamera(-frustH*aspect, frustH*aspect, frustH, -frustH, 0.1, 300);
+  camTarget.x = COLS * TSCALE / 2;
+  camTarget.z = ROWS * TSCALE / 2;
+  var dist = 25;
+  camera.position.set(camTarget.x + dist, dist * 0.82, camTarget.z + dist);
+  camera.lookAt(new THREE.Vector3(camTarget.x, 0, camTarget.z));
+  camera.zoom = camZoom;
+  camera.updateProjectionMatrix();
 }
 
 function updateCameraTarget() {
-  var dist=25;
-  camera.position.set(camTarget.x+dist,dist*.82,camTarget.z+dist);
-  camera.lookAt(new THREE.Vector3(camTarget.x,0,camTarget.z));
-  camera.zoom=camZoom; camera.updateProjectionMatrix();
+  var dist = 25;
+  camera.position.set(camTarget.x + dist, dist * 0.82, camTarget.z + dist);
+  camera.lookAt(new THREE.Vector3(camTarget.x, 0, camTarget.z));
+  camera.zoom = camZoom;
+  camera.updateProjectionMatrix();
 }
 
 // ---- INIT ----
 function initCanvas() {
-  var wrap=document.getElementById('canvas-wrap');
-  renderer=new THREE.WebGLRenderer({antialias:true,canvas:document.getElementById('gameCanvas')});
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
-  renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+  var wrap = document.getElementById('canvas-wrap');
+  renderer = new THREE.WebGLRenderer({ antialias: true, canvas: document.getElementById('gameCanvas') });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.setClearColor(0x87ceeb);
-  var W=wrap.clientWidth||window.innerWidth, H=wrap.clientHeight||window.innerHeight;
-  renderer.setSize(W,H);
-  scene=new THREE.Scene();
-  scene.fog=new THREE.FogExp2(0x87ceeb,.016);
-  clock=new THREE.Clock();
-  raycaster=new THREE.Raycaster(); mouse=new THREE.Vector2();
-  ambLight=new THREE.AmbientLight(0xffffff,.5); scene.add(ambLight);
-  hemiLight=new THREE.HemisphereLight(0x87ceeb,0x5a9e50,.4); scene.add(hemiLight);
-  sunLight=new THREE.DirectionalLight(0xffffff,1.2);
-  sunLight.position.set(15,22,10); sunLight.castShadow=true;
-  sunLight.shadow.mapSize.width=sunLight.shadow.mapSize.height=1024;
-  sunLight.shadow.camera.left=-30; sunLight.shadow.camera.right=30;
-  sunLight.shadow.camera.top=30; sunLight.shadow.camera.bottom=-30;
-  sunLight.shadow.camera.far=80; sunLight.shadow.bias=-.001;
+
+  var W = wrap.clientWidth || window.innerWidth;
+  var H = wrap.clientHeight || window.innerHeight;
+  renderer.setSize(W, H);
+
+  scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x87ceeb, 0.016);
+  clock = new THREE.Clock();
+  raycaster = new THREE.Raycaster();
+  mouse = new THREE.Vector2();
+
+  // Licht-Setup
+  ambLight = new THREE.AmbientLight(0xffffff, 0.5);
+  scene.add(ambLight);
+
+  hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x5a9e50, 0.4);
+  scene.add(hemiLight);
+
+  sunLight = new THREE.DirectionalLight(0xffffff, 1.2);
+  sunLight.position.set(15, 22, 10);
+  sunLight.castShadow = true;
+  sunLight.shadow.mapSize.width  = 1024;
+  sunLight.shadow.mapSize.height = 1024;
+  sunLight.shadow.camera.left   = -30;
+  sunLight.shadow.camera.right  =  30;
+  sunLight.shadow.camera.top    =  30;
+  sunLight.shadow.camera.bottom = -30;
+  sunLight.shadow.camera.far    =  80;
+  sunLight.shadow.bias = -0.001;
   scene.add(sunLight);
+
   // Mondlicht (blau-weiß, nur nachts aktiv via updateDayLight)
-  moonLight=new THREE.DirectionalLight(0x8899dd,0.0);
-  moonLight.position.set(-10,18,5); scene.add(moonLight);
-  setupCamera(); generateMap(); buildScene();
-  window.addEventListener('resize',resizeCanvas);
+  moonLight = new THREE.DirectionalLight(0x8899ee, 0.0);
+  moonLight.position.set(-12, 18, 6);
+  scene.add(moonLight);
+
+  setupCamera();
+  generateMap();
+  buildScene();
+  window.addEventListener('resize', resizeCanvas);
   initCameraDrag();
 }
 
 function resizeCanvas() {
-  var wrap=document.getElementById('canvas-wrap');
-  var W=wrap.clientWidth||window.innerWidth, H=wrap.clientHeight||window.innerHeight;
-  if(!W||!H) return;
-  renderer.setSize(W,H);
-  var aspect=W/H, frustH=10;
-  camera.left=-frustH*aspect; camera.right=frustH*aspect;
-  camera.top=frustH; camera.bottom=-frustH;
+  var wrap = document.getElementById('canvas-wrap');
+  var W = wrap.clientWidth || window.innerWidth;
+  var H = wrap.clientHeight || window.innerHeight;
+  if (!W || !H) return;
+  renderer.setSize(W, H);
+  var aspect = W / H, frustH = 10;
+  camera.left   = -frustH * aspect;
+  camera.right  =  frustH * aspect;
+  camera.top    =  frustH;
+  camera.bottom = -frustH;
   camera.updateProjectionMatrix();
 }
 
 // ---- INPUT ----
 function initCameraDrag() {
-  var wrap=document.getElementById('canvas-wrap');
-  wrap.addEventListener('mousedown',function(e){
-    if(state.buildMode) return;
-    camDrag=true; _lastMouseX=e.clientX; _lastMouseY=e.clientY;
-    wrap.style.cursor='grabbing';
+  var wrap = document.getElementById('canvas-wrap');
+  wrap.addEventListener('mousedown', function(e) {
+    if (state.buildMode) return;
+    camDrag = true; _lastMouseX = e.clientX; _lastMouseY = e.clientY;
+    wrap.style.cursor = 'grabbing';
   });
-  window.addEventListener('mousemove',function(e){
-    if(!camDrag) return;
-    var dx=(e.clientX-_lastMouseX)*.04/camZoom, dy=(e.clientY-_lastMouseY)*.04/camZoom;
-    camTarget.x-=dx*Math.cos(CAM_ANGLE)+dy*Math.sin(CAM_ANGLE);
-    camTarget.z-=dy*Math.cos(CAM_ANGLE)-dx*Math.sin(CAM_ANGLE);
-    _lastMouseX=e.clientX; _lastMouseY=e.clientY;
+  window.addEventListener('mousemove', function(e) {
+    if (!camDrag) return;
+    var dx = (e.clientX - _lastMouseX) * 0.04 / camZoom;
+    var dy = (e.clientY - _lastMouseY) * 0.04 / camZoom;
+    camTarget.x -= dx * Math.cos(CAM_ANGLE) + dy * Math.sin(CAM_ANGLE);
+    camTarget.z -= dy * Math.cos(CAM_ANGLE) - dx * Math.sin(CAM_ANGLE);
+    _lastMouseX = e.clientX; _lastMouseY = e.clientY;
   });
-  window.addEventListener('mouseup',function(){camDrag=false;wrap.style.cursor='default';});
-  wrap.addEventListener('wheel',function(e){
+  window.addEventListener('mouseup', function() { camDrag = false; wrap.style.cursor = 'default'; });
+  wrap.addEventListener('wheel', function(e) {
     e.preventDefault();
-    camZoom=Math.max(MIN_ZOOM,Math.min(MAX_ZOOM,camZoom*(e.deltaY<0?1.1:.91)));
-  },{passive:false});
+    camZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, camZoom * (e.deltaY < 0 ? 1.1 : 0.91)));
+  }, { passive: false });
   // Touch
-  var _tx=0,_ty=0,_pd=null;
-  wrap.addEventListener('touchstart',function(e){
-    if(e.touches.length===1){camDrag=true;_tx=e.touches[0].clientX;_ty=e.touches[0].clientY;}
-    else if(e.touches.length===2){camDrag=false;_pd=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);}
-  },{passive:true});
-  wrap.addEventListener('touchmove',function(e){
-    if(e.touches.length===1&&camDrag){
-      var dx=(e.touches[0].clientX-_tx)*.04/camZoom,dy=(e.touches[0].clientY-_ty)*.04/camZoom;
-      camTarget.x-=dx*Math.cos(CAM_ANGLE)+dy*Math.sin(CAM_ANGLE);
-      camTarget.z-=dy*Math.cos(CAM_ANGLE)-dx*Math.sin(CAM_ANGLE);
-      _tx=e.touches[0].clientX;_ty=e.touches[0].clientY;
-    } else if(e.touches.length===2&&_pd){
-      var nd=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
-      camZoom=Math.max(MIN_ZOOM,Math.min(MAX_ZOOM,camZoom*(nd/_pd)));_pd=nd;
+  var _tx = 0, _ty = 0, _pd = null;
+  wrap.addEventListener('touchstart', function(e) {
+    if (e.touches.length === 1) { camDrag = true; _tx = e.touches[0].clientX; _ty = e.touches[0].clientY; }
+    else if (e.touches.length === 2) { camDrag = false; _pd = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); }
+  }, { passive: true });
+  wrap.addEventListener('touchmove', function(e) {
+    if (e.touches.length === 1 && camDrag) {
+      var dx = (e.touches[0].clientX - _tx) * 0.04 / camZoom;
+      var dy = (e.touches[0].clientY - _ty) * 0.04 / camZoom;
+      camTarget.x -= dx * Math.cos(CAM_ANGLE) + dy * Math.sin(CAM_ANGLE);
+      camTarget.z -= dy * Math.cos(CAM_ANGLE) - dx * Math.sin(CAM_ANGLE);
+      _tx = e.touches[0].clientX; _ty = e.touches[0].clientY;
+    } else if (e.touches.length === 2 && _pd) {
+      var nd = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+      camZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, camZoom * (nd / _pd)));
+      _pd = nd;
     }
-  },{passive:true});
-  wrap.addEventListener('touchend',function(e){
-    if(e.touches.length<1)camDrag=false;if(e.touches.length<2)_pd=null;
+  }, { passive: true });
+  wrap.addEventListener('touchend', function(e) {
+    if (e.touches.length < 1) camDrag = false;
+    if (e.touches.length < 2) _pd = null;
   });
 }
 
-// ---- KOORDINATEN (Kompatibilität) ----
-function toIso(c,r) {
-  var wp=tileToWorld(c,r);
-  var v3=new THREE.Vector3(wp.x,0,wp.z); v3.project(camera);
-  var wrap=document.getElementById('canvas-wrap');
-  var W=wrap.clientWidth,H=wrap.clientHeight;
-  return {x:(v3.x+1)/2*W,y:(-v3.y+1)/2*H};
+// ---- KOORDINATEN (Kompatibilität mit game.js) ----
+function toIso(c, r) {
+  var wp = tileToWorld(c, r);
+  var v3 = new THREE.Vector3(wp.x, 0, wp.z);
+  v3.project(camera);
+  var wrap = document.getElementById('canvas-wrap');
+  var W = wrap.clientWidth, H = wrap.clientHeight;
+  return { x: (v3.x + 1) / 2 * W, y: (-v3.y + 1) / 2 * H };
 }
 
-function fromIso(sx,sy) {
-  var wrap=document.getElementById('canvas-wrap');
-  var rect=wrap.getBoundingClientRect();
-  mouse.x=((sx-rect.left)/rect.width)*2-1;
-  mouse.y=-((sy-rect.top)/rect.height)*2+1;
-  raycaster.setFromCamera(mouse,camera);
-  var plane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
-  var target=new THREE.Vector3();
-  raycaster.ray.intersectPlane(plane,target);
-  return {col:Math.round(target.x/TSCALE),row:Math.round(target.z/TSCALE)};
+function fromIso(sx, sy) {
+  var wrap = document.getElementById('canvas-wrap');
+  var rect = wrap.getBoundingClientRect();
+  mouse.x =  ((sx - rect.left) / rect.width)  * 2 - 1;
+  mouse.y = -((sy - rect.top)  / rect.height) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  var plane  = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  var target = new THREE.Vector3();
+  raycaster.ray.intersectPlane(plane, target);
+  return { col: Math.round(target.x / TSCALE), row: Math.round(target.z / TSCALE) };
 }
 
-// Raycaster für game.js
-function getClickedBuilding(sx,sy) {
-  var wrap=document.getElementById('canvas-wrap');
-  var rect=wrap.getBoundingClientRect();
-  mouse.x=((sx-rect.left)/rect.width)*2-1;
-  mouse.y=-((sy-rect.top)/rect.height)*2+1;
-  raycaster.setFromCamera(mouse,camera);
-  var objs=[]; buildingGroup.traverse(function(o){if(o.isMesh)objs.push(o);});
-  var hits=raycaster.intersectObjects(objs,false);
-  if(hits.length>0){
-    var o=hits[0].object, g=o;
-    while(g.parent&&g.parent!==buildingGroup) g=g.parent;
-    if(g.userData&&g.userData.buildingId!==undefined){
-      for(var i=0;i<state.buildings.length;i++)
-        if(state.buildings[i].id===g.userData.buildingId) return state.buildings[i];
+function getClickedBuilding(sx, sy) {
+  var wrap = document.getElementById('canvas-wrap');
+  var rect = wrap.getBoundingClientRect();
+  mouse.x =  ((sx - rect.left) / rect.width)  * 2 - 1;
+  mouse.y = -((sy - rect.top)  / rect.height) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  var objs = [];
+  buildingGroup.traverse(function(o) { if (o.isMesh) objs.push(o); });
+  var hits = raycaster.intersectObjects(objs, false);
+  if (hits.length > 0) {
+    var o = hits[0].object, g = o;
+    while (g.parent && g.parent !== buildingGroup) g = g.parent;
+    if (g.userData && g.userData.buildingId !== undefined) {
+      for (var i = 0; i < state.buildings.length; i++)
+        if (state.buildings[i].id === g.userData.buildingId) return state.buildings[i];
     }
   }
   return null;
@@ -755,17 +926,19 @@ function getClickedBuilding(sx,sy) {
 
 // ---- HAUPT-DRAW ----
 function draw() {
-  var dt=clock.getDelta();
+  var dt = clock.getDelta();
   animateWater(dt);
   updateDayLight();
   updateCameraTarget();
-  syncVillagers(); animateVillagers(dt);
-  syncBuildings(); animateBuildings(dt);
-  // Hover-Tile
-  if(state.buildMode&&state.hoverTile){
-    var key=state.hoverTile.col+','+state.hoverTile.row;
-    for(var k in tileMeshes)
-      tileMeshes[k].material.emissive=k===key?new THREE.Color(0x4a8c00):new THREE.Color(0x000000);
+  syncVillagers();
+  animateVillagers(dt);
+  syncBuildings();
+  animateBuildings(dt);
+  // Hover-Tile im Build-Modus
+  if (state.buildMode && state.hoverTile) {
+    var key = state.hoverTile.col + ',' + state.hoverTile.row;
+    for (var k in tileMeshes)
+      tileMeshes[k].material.emissive = k === key ? new THREE.Color(0x4a8c00) : new THREE.Color(0x000000);
   }
-  renderer.render(scene,camera);
+  renderer.render(scene, camera);
 }

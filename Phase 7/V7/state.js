@@ -1,10 +1,9 @@
 // ============================================================
-// STATE.JS – v6.5
-// Neu: Deterministische Karte (gleich für alle), production timer
-//      pro Gebäude, langsamere Bewegungen
+// STATE.JS – v7.0
+// Phase 7: Wandering AI für Idle-Villager
 // ============================================================
 
-var SAVE_KEY_PREFIX = 'greendale_v7_'; // Gleicher Key wie vorherige Versionen – Spielstand bleibt erhalten
+var SAVE_KEY_PREFIX = 'greendale_v7_';
 
 var state = {
   playerName:       'Spieler',
@@ -23,7 +22,6 @@ var state = {
   prevXP:           0,
   activeEvent:      null,
   tradeOffer:       null,
-  // Pro-Gebäude Timer: { buildingId: { elapsed: seconds, total: seconds } }
   buildingTimers:   {},
   villagers: [
     { id:0, name:'Lena',  skin:'#f4c490', hair:'#8b4a1a', shirt:'#e05a8a', pants:'#5a7abf', emoji:'👧', task:'Idle', hunger:5, x:5, y:5, tx:5, ty:5, vx:0, vy:0, buildingId:null, progress:0, anim:0 },
@@ -41,10 +39,9 @@ var state = {
 };
 
 // ============================================================
-// DETERMINISTISCHER SEED-GENERATOR (gleiche Karte für alle!)
+// DETERMINISTISCHER SEED-GENERATOR
 // ============================================================
 function seededRand(seed) {
-  // Mulberry32 – einfacher, schneller 32-bit PRNG
   return function() {
     seed |= 0; seed = seed + 0x6D2B79F5 | 0;
     var t = Math.imul(seed ^ seed >>> 15, 1 | seed);
@@ -52,7 +49,6 @@ function seededRand(seed) {
     return ((t ^ t >>> 14) >>> 0) / 4294967296;
   };
 }
-// Fixer Seed = gleiche Karte für alle Spieler weltweit
 var MAP_SEED = 42;
 var rng = seededRand(MAP_SEED);
 
@@ -79,31 +75,31 @@ function randomWalkTarget() {
   return { x: COLS / 2, y: ROWS / 2 };
 }
 
-// Wanderziel für Idle-Villager: bevorzugt nah am Dorfzentrum
+// Wanderziel für Idle-Villager: bleibt nah am Dorfzentrum
 function randomVillageWander(v) {
-  // 60% Chance: Ziel nahe Dorfmitte (5,5) + Radius 4
-  // 40% Chance: komplett zufällig
+  var cx = COLS * 0.42, cy = ROWS * 0.42;
   var tries = 0;
-  var centerX = COLS * 0.42, centerY = ROWS * 0.42;
   while (tries < 25) {
-    var nearCenter = Math.random() < 0.6;
     var tc, tr;
-    if (nearCenter) {
-      tc = centerX + (Math.random()-0.5)*8;
-      tr = centerY + (Math.random()-0.5)*8;
+    if (Math.random() < 0.65) {
+      // 65%: nah am Dorfzentrum (Radius 4 Tiles)
+      tc = cx + (Math.random() - 0.5) * 8;
+      tr = cy + (Math.random() - 0.5) * 8;
     } else {
-      tc = 1.5 + Math.random()*(COLS-3);
-      tr = 1.5 + Math.random()*(ROWS-3);
+      // 35%: irgendwo auf der Karte
+      tc = 1.5 + Math.random() * (COLS - 3);
+      tr = 1.5 + Math.random() * (ROWS - 3);
     }
-    tc = Math.max(1.5, Math.min(COLS-1.5, tc));
-    tr = Math.max(1.5, Math.min(ROWS-1.5, tr));
-    // Nicht zu nah am aktuellen Standort (min 2 Tiles Distanz)
-    var dx=tc-v.x, dy=tr-v.y;
-    if (Math.sqrt(dx*dx+dy*dy) > 2.0 && isTileWalkable(Math.round(tc), Math.round(tr)))
+    tc = Math.max(1.5, Math.min(COLS - 1.5, tc));
+    tr = Math.max(1.5, Math.min(ROWS - 1.5, tr));
+    var ddx = tc - v.x, ddy = tr - v.y;
+    // Mindestdistanz 2 Tiles vom aktuellen Standort
+    if (Math.sqrt(ddx*ddx + ddy*ddy) > 2.0 && isTileWalkable(Math.round(tc), Math.round(tr))) {
       return { x: tc, y: tr };
+    }
     tries++;
   }
-  return { x: centerX, y: centerY };
+  return { x: cx, y: cy };
 }
 
 // ============================================================
@@ -248,7 +244,7 @@ function startAutoSave() {
 }
 
 // ============================================================
-// PRODUKTION – v6.5: Pro-Gebäude-Timer statt globalem Interval
+// PRODUKTION
 // ============================================================
 var _lastProdTime = Date.now();
 
@@ -270,15 +266,13 @@ function tickProduction() {
     }
   }
 
-  // Pro-Gebäude-Timer aktualisieren
+  // Pro-Gebäude-Timer
   for (var i = 0; i < state.buildings.length; i++) {
     var bld = state.buildings[i];
     var ch  = CHAINS[bld.type];
     if (!ch || !ch.output) continue;
 
-    // Gibt es einen Worker in diesem Gebäude?
-    var hasWorker = false;
-    var workerHunger = 0;
+    var hasWorker = false, workerHunger = 0;
     for (var j = 0; j < state.villagers.length; j++) {
       if (state.villagers[j].buildingId === bld.id) {
         hasWorker = true;
@@ -289,62 +283,45 @@ function tickProduction() {
     if (!hasWorker) continue;
 
     var totalSec = PRODUCE_INTERVAL_SEC[bld.type] || 30;
-
-    // Timer-Objekt initialisieren
-    if (!state.buildingTimers[bld.id]) {
+    if (!state.buildingTimers[bld.id])
       state.buildingTimers[bld.id] = { elapsed: 0, total: totalSec };
-    }
     var timer = state.buildingTimers[bld.id];
     timer.total = totalSec;
 
-    // Hunger beeinflusst Geschwindigkeit
     var hungerMult = workerHunger >= 4 ? 1.0 :
                      workerHunger >= 3 ? 0.85 :
-                     workerHunger >= 2 ? 0.6 :
-                     workerHunger >= 1 ? 0.35 : 0.1;
-
+                     workerHunger >= 2 ? 0.6  :
+                     workerHunger >= 1 ? 0.35  : 0.1;
     timer.elapsed = Math.min(timer.total, timer.elapsed + dtSec * hungerMult);
 
-    // Fortschritt für Villager-Progress-Wert (0-100)
     for (var j = 0; j < state.villagers.length; j++) {
-      if (state.villagers[j].buildingId === bld.id) {
+      if (state.villagers[j].buildingId === bld.id)
         state.villagers[j].progress = (timer.elapsed / timer.total) * 100;
-      }
     }
 
-    // Produktion auslösen wenn Timer voll
     if (timer.elapsed >= timer.total) {
-      // Input prüfen
       var canProduce = true;
-      if (ch.input && state.resources[ch.input] < ch.inputAmt) canProduce = false;
+      if (ch.input  && state.resources[ch.input]  < ch.inputAmt)  canProduce = false;
       if (ch.inputB && state.resources[ch.inputB] < ch.inputAmtB) canProduce = false;
-
       if (canProduce) {
         if (ch.input)  state.resources[ch.input]  = Math.max(0, state.resources[ch.input]  - ch.inputAmt);
         if (ch.inputB) state.resources[ch.inputB] = Math.max(0, state.resources[ch.inputB] - ch.inputAmtB);
         if (!state.resources[ch.output]) state.resources[ch.output] = 0;
         state.resources[ch.output] = Math.min(999, state.resources[ch.output] + ch.outputAmt);
       }
-
-      // Timer zurücksetzen (auch bei canProduce=false, damit nicht blockiert)
       timer.elapsed = 0;
-
-      // Villager-Progress zurücksetzen
       for (var j = 0; j < state.villagers.length; j++) {
-        if (state.villagers[j].buildingId === bld.id) {
+        if (state.villagers[j].buildingId === bld.id)
           state.villagers[j].progress = 0;
-        }
       }
     }
   }
 
-  // Ressourcen-Anzeige alle 60 Frames aktualisieren
   if (state.tick % 60 === 0) {
     updateResourceDisplay();
     checkNewVillager();
   }
 
-  // Tageszyklus
   if (state.tick % (DAY_PHASE_FRAMES * 4) === 0) {
     state.day++;
     var timeEl = document.getElementById('time-chip');
@@ -437,41 +414,46 @@ function updateLevelDisplay() {
 }
 
 // ============================================================
-// BEWEGUNG – v7: Wandering AI für Idle-Villager
+// BEWEGUNG – v7.0: Wandering AI für Idle-Villager
 // ============================================================
 function moveVillagers() {
   for (var i = 0; i < state.villagers.length; i++) {
     var v = state.villagers[i];
+
     if (v.buildingId !== null) {
-      // Arbeitender Villager → zum Gebäude
+      // Arbeitender Villager → zum Gebäude bewegen
       for (var j = 0; j < state.buildings.length; j++) {
         if (state.buildings[j].id === v.buildingId) {
-          v.tx = state.buildings[j].col; v.ty = state.buildings[j].row; break;
+          v.tx = state.buildings[j].col;
+          v.ty = state.buildings[j].row;
+          break;
         }
       }
     } else {
       // Idle Villager → Wandering AI
-      var dx = v.x - v.tx, dy = v.y - v.ty;
-      if (Math.sqrt(dx*dx + dy*dy) < ARRIVE_DIST) {
+      var ddx = v.x - v.tx, ddy = v.y - v.ty;
+      if (Math.sqrt(ddx*ddx + ddy*ddy) < ARRIVE_DIST) {
         if (!v._waitFrames) v._waitFrames = 0;
         v._waitFrames++;
-        // Variable Wartezeit: 120–300 Frames (2–5 Sek), je nach Villager-ID
-        var waitDur = 150 + (v.id * 37) % 150;
+        // Variable Wartezeit 120-300 Frames (2-5s), je nach ID gestaffelt
+        var waitDur = 120 + (v.id * 43 % 180);
         if (v._waitFrames > waitDur) {
-          var t = randomVillageWander(v);
-          v.tx = t.x; v.ty = t.y;
+          var wt = randomVillageWander(v);
+          v.tx = wt.x; v.ty = wt.y;
           v._waitFrames = 0;
         }
       }
     }
+
     var ex = v.tx - v.x, ey = v.ty - v.y;
     var d  = Math.sqrt(ex*ex + ey*ey);
-    var speed = v.buildingId !== null ? ACCEL * 1.0 : ACCEL;
+    var speed = ACCEL;
     var slowF = Math.min(1, d * 2);
     if (d > ARRIVE_DIST) { v.vx += (ex/d)*speed*slowF; v.vy += (ey/d)*speed*slowF; }
     v.vx *= FRICTION; v.vy *= FRICTION;
     var vm = Math.sqrt(v.vx*v.vx + v.vy*v.vy), maxSpd = 0.018;
     if (vm > maxSpd) { v.vx = (v.vx/vm)*maxSpd; v.vy = (v.vy/vm)*maxSpd; }
+
     var nx = v.x + v.vx, ny = v.y + v.vy;
     if (isTileWalkable(Math.round(nx), Math.round(ny))) {
       v.x = nx; v.y = ny;
@@ -481,7 +463,7 @@ function moveVillagers() {
       v.y = ny; v.vx = 0;
     } else {
       v.vx = 0; v.vy = 0;
-      var t2 = randomVillageWander(v); v.tx = t2.x; v.ty = t2.y;
+      var wt2 = randomVillageWander(v); v.tx = wt2.x; v.ty = wt2.y;
     }
     v.x = Math.max(0.5, Math.min(COLS-1.5, v.x));
     v.y = Math.max(0.5, Math.min(ROWS-1.5, v.y));
@@ -527,7 +509,7 @@ function placeBuilding(col, row) {
   for (var i = 0; i < state.villagers.length; i++) {
     var v = state.villagers[i];
     if (Math.round(v.x) === col && Math.round(v.y) === row) {
-      var t3 = randomWalkTarget(); v.tx = t3.x; v.ty = t3.y;
+      var wt3 = randomWalkTarget(); v.tx = wt3.x; v.ty = wt3.y;
     }
   }
 
