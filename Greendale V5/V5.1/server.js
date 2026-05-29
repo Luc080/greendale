@@ -14,10 +14,9 @@ const server = http.createServer(app);
 const wss    = new WebSocket.Server({ server });
 const PORT   = process.env.PORT || 3000;
 
-// Zeile 17 ersetzen:
-app.use(express.static(path.join(__dirname)));
+app.use(express.static(path.join(__dirname, 'public')));
 app.get('*', (req, res) =>
-  res.sendFile(path.join(__dirname, 'index.html'))
+  res.sendFile(path.join(__dirname, 'public', 'index.html'))
 );
 
 // ============================================================
@@ -165,12 +164,15 @@ async function dbLoadPlayer(playerName) {
 
 async function dbSavePlayer(playerName, stateData) {
   if (!supabase) return;
+  console.log('💾 Speichere:', playerName);
   try {
-    await supabase.from('players').upsert({
+    const { data, error } = await supabase.from('players').upsert({
       name: playerName,
       state: stateData,
       updated_at: new Date().toISOString()
     }, { onConflict: 'name' });
+    if (error) console.error('❌ DB Fehler:', JSON.stringify(error));
+    else console.log('✅ DB gespeichert');
   } catch(e) {
     console.warn('DB save error:', e.message);
   }
