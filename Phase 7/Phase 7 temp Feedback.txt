@@ -1,0 +1,4 @@
+die animation der Figuren funktioniert noch nicht
+die Hausdächer passen auch nicht alle auf haus. und die häuser sind immernoch alle gleich. eine schmiede wie in minecraft könnte man machen. oder für einen Steinbruch einen höhleneingang oder sowas
+das mit dem übergangslosen Hintergrund hast du auch noch nicht gemacht
+casino könnte etwas mehr aussen Gestaltung vertragen
